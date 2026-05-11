@@ -111,14 +111,25 @@ export default function App() {
           const userDoc = await getDoc(doc(db, "users", u.uid));
           if (userDoc.exists()) {
             const profile = userDoc.data();
+            const lowerEmail = u.email?.toLowerCase();
+            const isAdminEmail = lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com";
+            
+            // Force 2FA for admins/owner
+            const effectiveTfaEnabled = isAdminEmail ? true : (profile.tfaEnabled || false);
+            
             setUserProfile(profile);
-            setIsTfaEnabled(profile.tfaEnabled || false);
+            setIsTfaEnabled(effectiveTfaEnabled);
             setTfaSecret(profile.tfaSecret || null);
             
             // Handle authorization based on 2FA settings
-            if (profile.tfaEnabled) {
+            if (effectiveTfaEnabled) {
               if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
                 setIsAuthorized(true);
+              } else if (!profile.tfaSecret) {
+                // Forced TFA but no secret set yet - allow entry to setup
+                setIsAuthorized(true);
+                sessionStorage.setItem("tfa_authenticated", u.uid);
+                setView('settings');
               } else {
                 setIsAuthorized(false);
                 setLoginStep('tfa');
@@ -134,7 +145,7 @@ export default function App() {
               const initialProfile = {
                 email: u.email,
                 role: "admin",
-                tfaEnabled: false,
+                tfaEnabled: true, // Default to true for admins
                 createdAt: serverTimestamp()
               };
               try {
