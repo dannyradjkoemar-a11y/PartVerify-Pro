@@ -383,7 +383,13 @@ export default function App() {
     const missing = results.filter(r => r.status === 'missing').length;
     const approved = results.filter(r => r.status === 'approved').length;
     const totalPriceDiff = results.reduce((acc, r) => acc + r.priceDiff, 0);
-    return { matched, deviations, missing, approved, totalPriceDiff };
+    
+    // Sum of all "good" prices: manual overrides OR invoice matches
+    const totalVerifiedAmount = results
+      .filter(r => r.status !== 'removed' && r.status !== 'missing')
+      .reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? 0), 0);
+
+    return { matched, deviations, missing, approved, totalPriceDiff, totalVerifiedAmount };
   }, [results]);
 
   const filteredResults = useMemo(() => {
@@ -499,6 +505,11 @@ export default function App() {
     doc.setTextColor(217, 119, 6); // Amber-600
     doc.setFontSize(11);
     doc.text(`Totaal Prijsverschil: EUR ${stats.totalPriceDiff.toFixed(2)}`, 14, 94);
+    
+    doc.setTextColor(37, 99, 235); // Blue-600
+    doc.setFont("helvetica", "bold");
+    doc.text(`TOTAAL GEVERIFIEERD BEDRAG: EUR ${stats.totalVerifiedAmount.toFixed(2)}`, 14, 100);
+    doc.setFont("helvetica", "normal");
 
     // Table
     const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
@@ -516,7 +527,7 @@ export default function App() {
     ]);
 
     autoTable(doc, {
-      startY: 104,
+      startY: 108,
       head: [['Status', 'Pos.', 'Onderdeel', 'Partnummer', 'Calc. Prijs', 'Factuur Prijs', 'Verschil']],
       body: tableData,
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 9, fontStyle: 'bold' },
@@ -762,7 +773,7 @@ export default function App() {
             </div>
 
             {/* Stats Dashboard */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
               <StatsCard 
                 label="Calculatie" 
                 value={calculationParts.length} 
@@ -798,6 +809,12 @@ export default function App() {
                 value={`€ ${stats.totalPriceDiff.toFixed(2)}`} 
                 icon={<RefreshCw className={`text-amber-600 ${stats.totalPriceDiff !== 0 ? 'animate-spin-slow' : ''}`} />} 
                 color="bg-amber-50 text-amber-700" 
+              />
+              <StatsCard 
+                label="Totaal Bedrag" 
+                value={`€ ${stats.totalVerifiedAmount.toFixed(2)}`} 
+                icon={<ClipboardCheck className="text-blue-600" />} 
+                color="bg-blue-600 text-white shadow-lg shadow-blue-200" 
               />
             </div>
 
