@@ -13,7 +13,7 @@ export interface AutomotivePart {
   description: string;
   partNumber: string;
   price: number;
-  originalLine: string;
+  originalLine?: string;
 }
 
 export const semanticSynonyms: Record<string, string[]> = {

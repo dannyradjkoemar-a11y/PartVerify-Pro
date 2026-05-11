@@ -19,7 +19,10 @@ import {
   RefreshCw,
   Eye,
   EyeOff,
-  FileDown
+  FileDown,
+  LogOut,
+  Trash2,
+  Plus
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -86,6 +89,9 @@ export default function App() {
 
   const [loading, setLoading] = useState(true);
 
+  const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
+  const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
+
   const handleFirestoreError = (error: any, operation: string, path: string) => {
     const errInfo = {
       error: error instanceof Error ? error.message : String(error),
@@ -123,12 +129,9 @@ export default function App() {
             
             // Handle authorization based on 2FA settings
             if (effectiveTfaEnabled) {
-              if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
-                setIsAuthorized(true);
-              } else if (!profile.tfaSecret) {
+              if (!profile.tfaSecret) {
                 // Forced TFA but no secret set yet - allow entry to setup
                 setIsAuthorized(true);
-                sessionStorage.setItem("tfa_authenticated", u.uid);
                 setView('settings');
               } else {
                 setIsAuthorized(false);
@@ -136,7 +139,6 @@ export default function App() {
               }
             } else {
               setIsAuthorized(true);
-              sessionStorage.setItem("tfa_authenticated", u.uid);
             }
           } else {
             // New user (should only happen via Admin creation usually, but first one can be special)
@@ -152,7 +154,6 @@ export default function App() {
                 await setDoc(doc(db, "users", u.uid), initialProfile);
                 setUserProfile(initialProfile);
                 setIsAuthorized(true);
-                sessionStorage.setItem("tfa_authenticated", u.uid);
               } catch (setErr) {
                 handleFirestoreError(setErr, 'write', `users/${u.uid}`);
                 await signOut(auth);
@@ -239,7 +240,6 @@ export default function App() {
 
   const handleLogout = async () => {
     await signOut(auth);
-    sessionStorage.removeItem("tfa_authenticated");
     setView('dashboard');
   };
 
@@ -263,7 +263,6 @@ export default function App() {
 
     if (delta !== null) {
       setIsAuthorized(true);
-      sessionStorage.setItem("tfa_authenticated", user.uid);
     } else {
       alert("Ongeldige 2FA code!");
     }
@@ -313,9 +312,12 @@ export default function App() {
   const invoiceParts = useMemo(() => parseInvoice(invoiceInput), [invoiceInput]);
 
   const results = useMemo(() => {
-    if (calculationParts.length === 0) return [];
+    if (calculationParts.length === 0 && manualParts.length === 0) return [];
 
-    return calculationParts.map(calcPart => {
+    const filteredCalc = calculationParts.filter(p => !removedPartIds.has(p.id));
+    const combined = [...filteredCalc, ...manualParts];
+
+    return combined.map(calcPart => {
       const normalizedCalc = normalizePartNumber(calcPart.partNumber);
       
       // Find matches by part number
@@ -356,7 +358,7 @@ export default function App() {
         manualPrice
       };
     });
-  }, [calculationParts, invoiceParts, manualOverrides]);
+  }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides]);
 
   const stats = useMemo(() => {
     const matched = results.filter(r => r.status === 'matched').length;
@@ -384,6 +386,36 @@ export default function App() {
     setSearchQuery("");
     setManualOverrides({});
     setEditingCell(null);
+    setRemovedPartIds(new Set());
+    setManualParts([]);
+  };
+
+  const toggleRemovePart = (id: string) => {
+    setRemovedPartIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const addManualPart = () => {
+    const newPart: AutomotivePart = {
+      id: `MAN-${Date.now()}`,
+      description: "Nieuw Onderdeel",
+      partNumber: "00000000",
+      price: 0
+    };
+    setManualParts(prev => [...prev, newPart]);
+  };
+
+  const updateManualPart = (id: string, field: keyof AutomotivePart, value: any) => {
+    setManualParts(prev => prev.map(p => {
+      if (p.id === id) {
+        return { ...p, [field]: field === 'price' ? parseFloat(value) || 0 : value };
+      }
+      return p;
+    }));
   };
 
   const handleManualOverride = (id: string, partNumber: string) => {
@@ -657,9 +689,11 @@ export default function App() {
             )}
             <button 
               onClick={handleLogout}
-              className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+              className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 rounded-lg flex items-center gap-2 transition-all font-bold text-xs"
+              title="Uitloggen"
             >
-              <Lock size={20} />
+              <LogOut size={16} />
+              Uitloggen
             </button>
           </div>
         </div>
@@ -735,6 +769,13 @@ export default function App() {
                     {filteredResults.length} Rijen
                   </span>
                   <button 
+                    onClick={addManualPart}
+                    className="ml-2 flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 text-xs font-bold rounded-lg transition-all shadow-sm active:scale-95"
+                  >
+                    <Plus size={14} />
+                    Regel Toevoegen
+                  </button>
+                  <button 
                     onClick={downloadPDF}
                     disabled={results.length === 0}
                     className="ml-2 flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 text-xs font-bold rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -767,6 +808,7 @@ export default function App() {
                       <th className="px-6 py-4">Prijs Calc.</th>
                       <th className="px-6 py-4">Factuur Match / Prijs</th>
                       <th className="px-6 py-4">Verschil</th>
+                      <th className="px-6 py-4 text-right">Acties</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -807,7 +849,16 @@ export default function App() {
                               {res.calc.id}
                             </td>
                             <td className="px-6 py-4">
-                              <div className="font-semibold text-slate-800">{res.calc.description}</div>
+                              {res.calc.id.startsWith('MAN-') ? (
+                                <input 
+                                  type="text"
+                                  value={res.calc.description}
+                                  onChange={(e) => updateManualPart(res.calc.id, 'description', e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
+                              ) : (
+                                <div className="font-semibold text-slate-800">{res.calc.description}</div>
+                              )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
                                   Semantische Match
@@ -815,11 +866,35 @@ export default function App() {
                               )}
                             </td>
                             <td className="px-6 py-4">
-                              <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-mono whitespace-nowrap">
-                                {res.calc.partNumber}
-                              </code>
+                              {res.calc.id.startsWith('MAN-') ? (
+                                <input 
+                                  type="text"
+                                  value={res.calc.partNumber}
+                                  onChange={(e) => updateManualPart(res.calc.id, 'partNumber', e.target.value)}
+                                  className="w-28 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] font-mono focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
+                              ) : (
+                                <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-mono whitespace-nowrap">
+                                  {res.calc.partNumber}
+                                </code>
+                              )}
                             </td>
-                            <td className="px-6 py-4 font-medium">€ {res.calc.price.toFixed(2)}</td>
+                            <td className="px-6 py-4 font-medium">
+                              {res.calc.id.startsWith('MAN-') ? (
+                                <div className="flex items-center gap-1">
+                                  <span className="text-slate-400">€</span>
+                                  <input 
+                                    type="number"
+                                    step="0.01"
+                                    value={res.calc.price}
+                                    onChange={(e) => updateManualPart(res.calc.id, 'price', e.target.value)}
+                                    className="w-20 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                                  />
+                                </div>
+                              ) : (
+                                <>€ {res.calc.price.toFixed(2)}</>
+                              )}
+                            </td>
                             <td className="px-6 py-4">
                               {editingCell === `${res.calc.id}-${res.calc.partNumber}` ? (
                                 <div className="flex items-center gap-2">
@@ -896,11 +971,26 @@ export default function App() {
                                 <span className="text-slate-300">—</span>
                               )}
                             </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => {
+                                  if (res.calc.id.startsWith('MAN-')) {
+                                    setManualParts(prev => prev.filter(p => p.id !== res.calc.id));
+                                  } else {
+                                    toggleRemovePart(res.calc.id);
+                                  }
+                                }}
+                                className={`p-2 rounded-lg transition-all ${removedPartIds.has(res.calc.id) ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-200' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
+                                title={removedPartIds.has(res.calc.id) ? "Herstellen" : "Verwijderen"}
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
                           </motion.tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={6} className="px-6 py-20 text-center">
+                          <td colSpan={8} className="px-6 py-20 text-center">
                             <div className="flex flex-col items-center gap-3">
                               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
                                 <Search size={32} />
