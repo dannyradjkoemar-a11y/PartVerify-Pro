@@ -91,6 +91,7 @@ export default function App() {
 
   const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
+  const [showRemoved, setShowRemoved] = useState(true);
 
   const handleFirestoreError = (error: any, operation: string, path: string) => {
     const errInfo = {
@@ -314,10 +315,9 @@ export default function App() {
   const results = useMemo(() => {
     if (calculationParts.length === 0 && manualParts.length === 0) return [];
 
-    const filteredCalc = calculationParts.filter(p => !removedPartIds.has(p.id));
-    const combined = [...filteredCalc, ...manualParts];
+    const combined = [...calculationParts, ...manualParts];
 
-    return combined.map(calcPart => {
+    const allResults = combined.map(calcPart => {
       const normalizedCalc = normalizePartNumber(calcPart.partNumber);
       
       // Find matches by part number
@@ -342,8 +342,11 @@ export default function App() {
       // Handle floating point precision, ignore differences < 0.005
       const hasRealDiff = Math.abs(priceDiff) > 0.005;
 
-      let status: 'matched' | 'deviation' | 'missing' | 'approved' = 'missing';
-      if (manualPrice !== undefined) {
+      let status: 'matched' | 'deviation' | 'missing' | 'approved' | 'removed' = 'missing';
+      
+      if (removedPartIds.has(calcPart.id)) {
+        status = 'removed';
+      } else if (manualPrice !== undefined) {
         status = 'approved';
       } else if (finalMatch) {
         status = hasRealDiff ? 'deviation' : 'matched';
@@ -358,6 +361,17 @@ export default function App() {
         manualPrice
       };
     });
+
+    // Custom sorting: OK -> Deviation -> Missing -> Approved (Manual) -> Removed
+    const statusOrder = {
+      'matched': 0,
+      'deviation': 1,
+      'missing': 2,
+      'approved': 3,
+      'removed': 4
+    };
+
+    return allResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
   }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides]);
 
   const stats = useMemo(() => {
@@ -370,15 +384,20 @@ export default function App() {
   }, [results]);
 
   const filteredResults = useMemo(() => {
-    if (!searchQuery) return results;
+    let base = results;
+    if (!showRemoved) {
+      base = base.filter(r => r.status !== 'removed');
+    }
+    
+    if (!searchQuery) return base;
     const q = searchQuery.toLowerCase();
-    return results.filter(r => 
+    return base.filter(r => 
       r.calc.description.toLowerCase().includes(q) || 
       r.calc.partNumber.toLowerCase().includes(q) ||
       r.calc.id.includes(q) ||
       (r.match?.description.toLowerCase().includes(q))
     );
-  }, [results, searchQuery]);
+  }, [results, searchQuery, showRemoved]);
 
   const handleResetAll = () => {
     setCalcInput("");
@@ -474,10 +493,12 @@ export default function App() {
     doc.text(`Totaal Prijsverschil: EUR ${stats.totalPriceDiff.toFixed(2)}`, 14, 94);
 
     // Table
-    const tableData = results.map(res => [
+    const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
+    const tableData = visibleInPdf.map(res => [
       res.status === 'matched' ? 'OK' : 
-      res.status === 'approved' ? 'GOEDGEKEURD' :
-      res.status === 'deviation' ? 'AFWIJKING' : 'ONTBREEKT',
+      res.status === 'approved' ? 'GEWIJZIGD' :
+      res.status === 'deviation' ? 'AFWIJKING' : 
+      res.status === 'removed' ? 'VERWIJDERD' : 'ONTBREEKT',
       res.calc.id,
       res.calc.description,
       res.calc.partNumber,
@@ -504,9 +525,10 @@ export default function App() {
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 0) {
           if (data.cell.text[0] === 'OK') data.cell.styles.textColor = [16, 185, 129];
-          else if (data.cell.text[0] === 'GOEDGEKEURD') data.cell.styles.textColor = [245, 158, 11];
+          else if (data.cell.text[0] === 'GEWIJZIGD') data.cell.styles.textColor = [245, 158, 11];
           else if (data.cell.text[0] === 'AFWIJKING') data.cell.styles.textColor = [225, 29, 72];
           else if (data.cell.text[0] === 'ONTBREEKT') data.cell.styles.textColor = [244, 63, 94];
+          else if (data.cell.text[0] === 'VERWIJDERD') data.cell.styles.textColor = [150, 150, 150];
         }
         if (data.section === 'body' && data.column.index === 5) {
             const val = parseFloat(data.cell.text[0].replace('+', ''));
@@ -783,6 +805,18 @@ export default function App() {
                     <FileDown size={14} />
                     PDF Rapportage
                   </button>
+                  <label className="ml-4 flex items-center gap-2 cursor-pointer group">
+                    <div className="relative inline-flex items-center">
+                      <input 
+                        type="checkbox" 
+                        checked={showRemoved} 
+                        onChange={(e) => setShowRemoved(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                    <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors">Toon Verwijderd</span>
+                  </label>
                 </div>
                 
                 <div className="relative">
@@ -820,26 +854,31 @@ export default function App() {
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.02 }}
-                            className="group hover:bg-slate-50/80 transition-all"
+                            className={`group hover:bg-slate-50/80 transition-all ${res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''}`}
                           >
-                            <td className="px-6 py-4 text-xs">
+                            <td className="px-6 py-4 text-xs font-bold uppercase tracking-tight">
                               {res.status === 'matched' ? (
-                                <div className="flex items-center gap-2 text-emerald-600 font-bold">
+                                <div className="flex items-center gap-2 text-emerald-600">
                                   <CheckCircle2 size={16} />
                                   OK
                                 </div>
                               ) : res.status === 'approved' ? (
-                                <div className="flex items-center gap-2 text-amber-600 font-bold">
+                                <div className="flex items-center gap-2 text-amber-600">
                                   <ShieldCheck size={16} />
                                   AANGEPAST
                                 </div>
                               ) : res.status === 'deviation' ? (
-                                <div className="flex items-center gap-2 text-rose-600 font-bold">
+                                <div className="flex items-center gap-2 text-rose-600">
                                   <AlertCircle size={16} />
                                   AFWIJKING
                                 </div>
+                              ) : res.status === 'removed' ? (
+                                <div className="flex items-center gap-2 text-slate-400">
+                                  <Trash2 size={16} />
+                                  VERWIJDERD
+                                </div>
                               ) : (
-                                <div className="flex items-center gap-2 text-rose-500 font-bold">
+                                <div className="flex items-center gap-2 text-rose-500">
                                   <XCircle size={16} />
                                   ONTBREEKT
                                 </div>
@@ -854,10 +893,10 @@ export default function App() {
                                   type="text"
                                   value={res.calc.description}
                                   onChange={(e) => updateManualPart(res.calc.id, 'description', e.target.value)}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                                  className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               ) : (
-                                <div className="font-semibold text-slate-800">{res.calc.description}</div>
+                                <div className="font-semibold text-slate-800 text-sm">{res.calc.description}</div>
                               )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
@@ -874,21 +913,21 @@ export default function App() {
                                   className="w-28 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] font-mono focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               ) : (
-                                <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-mono whitespace-nowrap">
+                                <code className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[11px] font-mono whitespace-nowrap border border-slate-200">
                                   {res.calc.partNumber}
                                 </code>
                               )}
                             </td>
-                            <td className="px-6 py-4 font-medium">
+                            <td className="px-6 py-4 font-black text-slate-900 text-base whitespace-nowrap">
                               {res.calc.id.startsWith('MAN-') ? (
                                 <div className="flex items-center gap-1">
-                                  <span className="text-slate-400">€</span>
+                                  <span className="text-slate-400 text-sm font-bold">€</span>
                                   <input 
                                     type="number"
                                     step="0.01"
                                     value={res.calc.price}
                                     onChange={(e) => updateManualPart(res.calc.id, 'price', e.target.value)}
-                                    className="w-20 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                                    className="w-24 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-base font-black focus:ring-1 focus:ring-blue-500 outline-none"
                                   />
                                 </div>
                               ) : (
@@ -898,6 +937,7 @@ export default function App() {
                             <td className="px-6 py-4">
                               {editingCell === `${res.calc.id}-${res.calc.partNumber}` ? (
                                 <div className="flex items-center gap-2">
+                                  <span className="text-blue-500 font-black">€</span>
                                   <input 
                                     type="text"
                                     autoFocus
@@ -909,66 +949,54 @@ export default function App() {
                                       }
                                       setEditingCell(null);
                                     }}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') e.currentTarget.blur();
-                                      if (e.key === 'Escape') setEditingCell(null);
-                                    }}
-                                    className="w-24 p-1.5 border border-blue-400 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                                    className="w-28 p-2 border-2 border-blue-400 rounded-lg text-base font-black text-blue-700 focus:outline-none shadow-sm"
                                   />
                                 </div>
                               ) : res.status === 'approved' ? (
-                                <div className="flex items-center justify-between group/price">
-                                  <div className="text-amber-600 font-bold">
+                                <div className="flex items-center justify-between group/price cursor-pointer" onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}>
+                                  <div className="text-amber-600 font-extrabold text-base">
                                     € {res.manualPrice?.toFixed(2)}
-                                    <span className="ml-1 text-[10px] bg-amber-100 px-1 rounded uppercase tracking-tighter">Manual</span>
+                                    <span className="ml-2 text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Gewijzigd</span>
                                   </div>
                                   <button 
-                                    onClick={() => removeOverride(res.calc.id, res.calc.partNumber)}
-                                    className="opacity-0 group-hover/price:opacity-100 text-slate-400 hover:text-rose-500 transition-all"
-                                    title="Handmatige prijs verwijderen"
+                                    onClick={(e) => { e.stopPropagation(); removeOverride(res.calc.id, res.calc.partNumber); }}
+                                    className="opacity-0 group-hover/price:opacity-100 text-slate-400 hover:text-rose-500 transition-all p-1"
+                                    title="Aanpassing ongedaan maken"
                                   >
-                                    <RefreshCw size={12} />
+                                    <RefreshCw size={14} />
                                   </button>
                                 </div>
                               ) : res.match ? (
-                                <div className="space-y-1">
+                                <div className="space-y-1 cursor-pointer group/price" onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}>
                                   <div className="flex items-center gap-2">
-                                    <span className="text-slate-700">{res.match.description}</span>
+                                    <span className="text-slate-700 text-xs font-semibold truncate max-w-[150px]">{res.match.description}</span>
                                     {res.isSemantic && (
-                                      <span title="Intelligente match op beschrijving" className="text-amber-500 cursor-help">
+                                      <span title="Intelligente match op beschrijving" className="text-indigo-500 cursor-help">
                                         <AlertCircle size={14} />
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] font-mono text-slate-500 flex items-center gap-1">
-                                    <span>{res.match.partNumber}</span>
-                                    <ArrowRight size={10} />
-                                    <span className="text-emerald-600 font-bold">€ {res.match.price.toFixed(2)}</span>
-                                    <button 
-                                      onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
-                                      className="ml-2 text-slate-400 hover:text-blue-500"
-                                      title="Prijs handmatig aanpassen"
-                                    >
-                                      <RefreshCw size={10} />
-                                    </button>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`font-black text-base ${res.status === 'deviation' ? 'text-rose-600' : 'text-emerald-600'}`}>€ {res.match.price.toFixed(2)}</span>
+                                    <code className="text-[9px] font-mono text-slate-400">{res.match.partNumber}</code>
                                   </div>
                                 </div>
                               ) : (
                                 <button 
                                   onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
-                                  className="text-blue-500 hover:text-blue-700 text-xs font-bold underline flex items-center gap-1"
+                                  className="text-blue-500 hover:text-blue-700 text-sm font-black underline flex items-center gap-1 transition-colors"
                                 >
-                                  Prijs invullen
+                                  + Prijs invullen
                                 </button>
                               )}
                             </td>
                             <td className="px-6 py-4">
                               {res.priceDiff !== 0 ? (
-                                <span className={`font-bold ${res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                <span className={`font-black text-base ${res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                                   {res.priceDiff > 0 ? '+' : ''}{res.priceDiff.toFixed(2)}
                                 </span>
                               ) : (
-                                <span className="text-slate-300">—</span>
+                                <span className="text-slate-300 font-bold">—</span>
                               )}
                             </td>
                             <td className="px-6 py-4 text-right">
@@ -980,10 +1008,10 @@ export default function App() {
                                     toggleRemovePart(res.calc.id);
                                   }
                                 }}
-                                className={`p-2 rounded-lg transition-all ${removedPartIds.has(res.calc.id) ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-200' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
-                                title={removedPartIds.has(res.calc.id) ? "Herstellen" : "Verwijderen"}
+                                className={`p-2 rounded-lg transition-all ${res.status === 'removed' ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-200' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
+                                title={res.status === 'removed' ? "Herstellen" : "Verwijderen"}
                               >
-                                <Trash2 size={16} />
+                                {res.status === 'removed' ? <RefreshCw size={18} className="animate-spin-slow" /> : <Trash2 size={18} />}
                               </button>
                             </td>
                           </motion.tr>
