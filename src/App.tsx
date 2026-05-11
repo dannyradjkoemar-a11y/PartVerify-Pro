@@ -35,52 +35,141 @@ import {
   descriptionsMatch 
 } from "./utils";
 
-const PASSWORD_CORRECT = "Danitsha2015!";
+import { initializeApp } from "firebase/app";
+import { 
+  getAuth, 
+  signInWithEmailAndPassword, 
+  onAuthStateChanged, 
+  signOut,
+  User as FirebaseUser 
+} from "firebase/auth";
+import { 
+  getFirestore, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  collection, 
+  addDoc, 
+  query, 
+  getDocs,
+  serverTimestamp,
+  deleteDoc
+} from "firebase/firestore";
+import firebaseConfig from "../firebase-applet-config.json";
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 export default function App() {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tfaCode, setTfaCode] = useState("");
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginStep, setLoginStep] = useState<'password' | 'tfa'>('password');
-  const [view, setView] = useState<'dashboard' | 'settings'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [tfaSecret, setTfaSecret] = useState<string | null>(() => localStorage.getItem("tfa_secret"));
-  const [isTfaEnabled, setIsTfaEnabled] = useState<boolean>(() => localStorage.getItem("tfa_enabled") === "true");
+  const [tfaSecret, setTfaSecret] = useState<string | null>(null);
+  const [isTfaEnabled, setIsTfaEnabled] = useState<boolean>(false);
 
   const [manualOverrides, setManualOverrides] = useState<Record<string, number>>({});
   const [editingCell, setEditingCell] = useState<string | null>(null);
 
-  // Persist authorization for the session
+  const [loading, setLoading] = useState(true);
+
+  // Monitor auth state
   useEffect(() => {
-    const sessionAuth = sessionStorage.getItem("isAuthorized");
-    if (sessionAuth === "true") setIsAuthorized(true);
+    return onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        const userDoc = await getDoc(doc(db, "users", u.uid));
+        if (userDoc.exists()) {
+          const profile = userDoc.data();
+          setUserProfile(profile);
+          setIsTfaEnabled(profile.tfaEnabled || false);
+          setTfaSecret(profile.tfaSecret || null);
+          
+          // Only authorize if 2FA was already completed in this session
+          if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
+            setIsAuthorized(true);
+          } else {
+            setIsAuthorized(false);
+            setLoginStep('tfa');
+          }
+        } else {
+          // New user (should only happen via Admin creation usually, but first one can be special)
+          // For now, if it's the outlook email, we bootstrap
+          if (u.email === "partverify-pro@outlook.com") {
+            const initialProfile = {
+              email: u.email,
+              role: "admin",
+              tfaEnabled: false,
+              createdAt: serverTimestamp()
+            };
+            await setDoc(doc(db, "users", u.uid), initialProfile);
+            setUserProfile(initialProfile);
+            setIsAuthorized(true);
+            sessionStorage.setItem("tfa_authenticated", u.uid);
+          } else {
+            await signOut(auth);
+            alert("Toegang geweigerd. Neem contact op met de beheerder.");
+          }
+        }
+      } else {
+        setUser(null);
+        setUserProfile(null);
+        setIsAuthorized(false);
+        setLoginStep('password');
+      }
+      setLoading(false);
+    });
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === PASSWORD_CORRECT) {
-      if (isTfaEnabled && tfaSecret) {
-        setLoginStep('tfa');
-      } else {
-        setIsAuthorized(true);
-        sessionStorage.setItem("isAuthorized", "true");
-      }
-    } else {
-      alert("Fout wachtwoord!");
+    try {
+      // Log attempt
+      await addDoc(collection(db, "login_attempts"), {
+        email,
+        timestamp: serverTimestamp(),
+        status: "attempted",
+        userAgent: navigator.userAgent
+      });
+
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      // Auth change listener will handle the rest
+    } catch (error: any) {
+      alert("Inloggen mislukt: " + (error.message || "Onbekende fout"));
+      await addDoc(collection(db, "login_attempts"), {
+        email,
+        timestamp: serverTimestamp(),
+        status: "failed",
+        error: error.message
+      });
     }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    sessionStorage.removeItem("tfa_authenticated");
+    setView('dashboard');
   };
 
   const handleTfaVerify = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tfaSecret) return;
+    if (!tfaSecret || !user) return;
 
     const totp = new OTPAuth.TOTP({
       issuer: "PartVerify Pro",
-      label: "Danny Radjkoemar",
+      label: user.email || "User",
       algorithm: "SHA1",
       digits: 6,
       period: 30,
@@ -94,7 +183,7 @@ export default function App() {
 
     if (delta !== null) {
       setIsAuthorized(true);
-      sessionStorage.setItem("isAuthorized", "true");
+      sessionStorage.setItem("tfa_authenticated", user.uid);
     } else {
       alert("Ongeldige 2FA code!");
     }
@@ -103,14 +192,13 @@ export default function App() {
   const setupTfa = () => {
     const secret = new OTPAuth.Secret().base32;
     setTfaSecret(secret);
-    // Don't save to localStorage yet, only after verification
   };
 
-  const confirmTfa = (code: string) => {
-    if (!tfaSecret) return;
+  const confirmTfa = async (code: string) => {
+    if (!tfaSecret || !user) return;
     const totp = new OTPAuth.TOTP({
       issuer: "PartVerify Pro",
-      label: "Danny Radjkoemar",
+      label: user.email || "User",
       algorithm: "SHA1",
       digits: 6,
       period: 30,
@@ -119,21 +207,25 @@ export default function App() {
 
     const delta = totp.validate({ token: code, window: 1 });
     if (delta !== null) {
+      await updateDoc(doc(db, "users", user.uid), {
+        tfaEnabled: true,
+        tfaSecret: tfaSecret
+      });
       setIsTfaEnabled(true);
-      localStorage.setItem("tfa_secret", tfaSecret);
-      localStorage.setItem("tfa_enabled", "true");
       alert("2FA succesvol geactiveerd!");
     } else {
       alert("Ongeldige code. Probeer het opnieuw.");
     }
   };
 
-  const disableTfa = () => {
-    if (window.confirm("Weet u zeker dat u 2FA wilt uitschakelen?")) {
+  const disableTfa = async () => {
+    if (user && window.confirm("Weet u zeker dat u 2FA wilt uitschakelen?")) {
+      await updateDoc(doc(db, "users", user.uid), {
+        tfaEnabled: false,
+        tfaSecret: null
+      });
       setIsTfaEnabled(false);
       setTfaSecret(null);
-      localStorage.removeItem("tfa_secret");
-      localStorage.removeItem("tfa_enabled");
     }
   };
 
@@ -321,204 +413,13 @@ export default function App() {
     doc.save(`PartVerify_Rapport_${dateStr.replace(/\//g, '-')}.pdf`);
   };
 
-    // Functie voor een volledig werkende offline kopie
-  const downloadStandaloneTool = () => {
-    const standaloneHtml = `<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PartVerify Pro - Offline (By Danny Radjkoemar)</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-    </style>
-</head>
-<body className="bg-slate-50 text-slate-900">
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useMemo, useEffect } = React;
-        const PASSWORD_CORRECT = "${PASSWORD_CORRECT}";
-        
-        const normalize = (p) => p.replace(/[\s,.\-_/]/g, '').toUpperCase();
-        const parseCurrency = (val) => {
-            if (!val) return 0;
-            let cleaned = val.replace(/[€\s]/g, "");
-            const lastComma = cleaned.lastIndexOf(',');
-            const lastDot = cleaned.lastIndexOf('.');
-            
-            if (lastComma > lastDot) {
-                cleaned = cleaned.replace(/\./g, "").replace(",", ".");
-            } else if (lastDot > lastComma) {
-                const dotCount = (cleaned.match(/\./g) || []).length;
-                if (dotCount > 1) cleaned = cleaned.replace(/\./g, "");
-                else cleaned = cleaned.replace(/,/g, "");
-            } else {
-                cleaned = cleaned.replace(/[^\d.]/g, "");
-            }
-            const num = parseFloat(cleaned);
-            return isNaN(num) ? 0 : num;
-        };
-
-        const parseCalc = (t) => t.split('\n').filter(l => l.trim()).map(line => {
-            const m = line.match(/^(\d{4})\s+(.+?)\s{2,}([*A-Z0-9\s/.-]{2,})\s{2,}([\d\.,\s]+)$/);
-            return m ? { id: m[1], desc: m[2].trim(), num: m[3].trim(), p: parseCurrency(m[4]) } : null;
-        }).filter(x => x);
-
-        const parseInv = (t) => t.split('\\n').filter(l => l.trim()).map(line => {
-            const c = line.trim();
-            const pm = Array.from(c.matchAll(/(?:€\\s*)?(\\d+[\\.\\s]\\d+[,.]\\d{2}|\\d+[,.]\\d{2})(?!\\s*%)/g));
-            const ps = pm.map(m => parseCurrency(m[1]));
-            const w = c.split(/\\s+/);
-            return w[0].length >= 4 ? { num: w[0], desc: w.slice(1).join(' ').split(/\\d+[,.]\\d+/)[0].trim(), p: Math.max(...ps, 0) } : null;
-        }).filter(x => x);
-
-        function App() {
-            const [isAuth, setIsAuth] = useState(false);
-            const [pass, setPass] = useState("");
-            const [calcIn, setCalcIn] = useState("");
-            const [invIn, setInvIn] = useState("");
-            const [manualOverrides, setManualOverrides] = useState({});
-
-            useEffect(() => { if (isAuth && typeof lucide !== 'undefined') lucide.createIcons(); }, [isAuth, calcIn, invIn, manualOverrides]);
-
-            const results = useMemo(() => {
-                const cp = parseCalc(calcIn);
-                const ip = parseInv(invIn);
-                return cp.map(c => {
-                    const overrideKey = c.id + "-" + c.num;
-                    const manualPrice = manualOverrides[overrideKey];
-                    const match = ip.find(i => normalize(i.num) === normalize(c.num));
-                    
-                    const pDiff = manualPrice !== undefined 
-                        ? manualPrice - c.p 
-                        : (match ? match.p - c.p : 0);
-
-                    let status = 'mis';
-                    if (manualPrice !== undefined) status = 'approved';
-                    else if (match) status = Math.abs(pDiff) < 0.01 ? 'ok' : 'dev';
-
-                    return { c, match, status, diff: pDiff, manualPrice };
-                });
-            }, [calcIn, invIn, manualOverrides]);
-
-            const stats = useMemo(() => {
-                const ok = results.filter(r => r.status === 'ok').length;
-                const dev = results.filter(r => r.status === 'dev').length;
-                const mis = results.filter(r => r.status === 'mis').length;
-                const apr = results.filter(r => r.status === 'approved').length;
-                return { ok, dev, mis, apr };
-            }, [results]);
-
-            const handleOverride = (id, num, desc) => {
-                const input = window.prompt("Handmatige prijs voor " + desc + ":", "");
-                if (input !== null) {
-                    const cleaned = input.replace(',', '.').trim();
-                    const p = parseFloat(cleaned);
-                    if (!isNaN(p)) {
-                        setManualOverrides(prev => {
-                            const n = { ...prev };
-                            n[id + "-" + num] = p;
-                            return n;
-                        });
-                    }
-                }
-            };
-
-            if (!isAuth) return (
-                <div className="min-h-screen bg-slate-950 flex items-center justify-center p-6 text-white text-center">
-                    <div className="bg-white/5 p-10 rounded-[2rem] border border-white/10 w-full max-w-sm">
-                        <h1 className="text-2xl font-black mb-6">PartVerify Offline</h1>
-                        <input type="password" value={pass} onChange={e => setPass(e.target.value)} className="w-full bg-white/10 p-4 rounded-xl mb-4 text-center" placeholder="Wachtwoord" />
-                        <button onClick={() => pass === PASSWORD_CORRECT ? setIsAuth(true) : alert('Fout')} className="w-full bg-blue-600 p-4 rounded-xl font-bold">Inloggen</button>
-                    </div>
-                </div>
-            );
-
-            return (
-                <div className="min-h-screen pb-20">
-                    <header className="bg-white border-b p-6 flex justify-between items-center sticky top-0 z-50">
-                        <div>
-                            <h1 className="text-xl font-black">PartVerify Pro <span className="text-blue-600">Offline</span></h1>
-                            <p style={{fontSize: '9px', fontWeight: 'bold', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Developed by Danny Radjkoemar</p>
-                        </div>
-                        <button onClick={() => {setCalcIn(""); setInvIn("");}} className="bg-slate-100 px-4 py-2 rounded-lg font-bold text-sm">Reset</button>
-                    </header>
-                    <main className="max-w-5xl mx-auto p-6 space-y-10">
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase">Input</p><div className="text-2xl font-black">{results.length}</div></div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase">Match</p><div className="text-2xl font-black text-emerald-600">{stats.ok}</div></div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase">Aangepast</p><div className="text-2xl font-black text-amber-600">{stats.apr}</div></div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase">Afwijking</p><div className="text-2xl font-black text-rose-600">{stats.dev}</div></div>
-                            <div className="bg-white p-6 rounded-2xl border shadow-sm"><p className="text-[10px] font-black text-slate-400 uppercase">Missing</p><div className="text-2xl font-black text-rose-300">{stats.mis}</div></div>
-                        </div>
-                        <div className="space-y-8">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase px-2">Eindcalculatie</label>
-                                <textarea value={calcIn} onChange={e => setCalcIn(e.target.value)} className="w-full h-64 p-6 rounded-2xl border focus:ring-4 focus:ring-blue-500/10 outline-none" placeholder="Plak hier de calculatie..."></textarea>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase px-2">Facturen</label>
-                                <textarea value={invIn} onChange={e => setInvIn(e.target.value)} className="w-full h-64 p-6 rounded-2xl border focus:ring-4 focus:ring-blue-500/10 outline-none" placeholder="Plak hier de factuurregels..."></textarea>
-                            </div>
-                        </div>
-                        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                            <table className="w-full text-sm text-left">
-                                <thead className="bg-slate-50 text-[10px] uppercase font-black text-slate-400">
-                                    <tr><th className="p-4">Status</th><th className="p-4">Onderdeel</th><th className="p-4">Calc</th><th className="p-4">Factuur</th><th className="p-4">Verschil</th></tr>
-                                </thead>
-                                <tbody className="divide-y">
-                                    {results.map((r,i) => (
-                                        <tr key={i} className="hover:bg-slate-50">
-                                            <td className="p-4 font-bold">
-                                                {r.status === 'ok' ? '✅' : r.status === 'approved' ? '🟠' : r.status === 'dev' ? '⚠️' : '❓'}
-                                            </td>
-                                            <td className="p-4"><div>{r.c.desc}</div><div className="text-[10px] text-slate-400 font-mono">{r.c.num}</div></td>
-                                            <td className="p-4">€{r.c.p.toFixed(2)}</td>
-                                            <td className="p-4">
-                                                {r.status === 'approved' ? (
-                                                    <div className="text-amber-600 font-black">€{r.manualPrice.toFixed(2)}</div>
-                                                ) : r.match ? (
-                                                    <div className="flex items-center gap-2">
-                                                        €{r.match.p.toFixed(2)}
-                                                        <button onClick={() => handleOverride(r.c.id, r.c.num, r.c.desc)} className="text-slate-300 hover:text-blue-500 text-[10px]">Aanpassen</button>
-                                                    </div>
-                                                ) : (
-                                                    <button onClick={() => handleOverride(r.c.id, r.c.num, r.c.desc)} className="text-blue-500 text-xs font-bold underline">Prijs invullen</button>
-                                                )}
-                                            </td>
-                                            <td className={"p-4 font-black " + (r.diff > 0 ? "text-amber-600" : "text-emerald-600")}>{r.diff !== 0 ? r.diff.toFixed(2) : '-'}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </main>
-                </div>
-            );
-        }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>`;
-
-    const blob = new Blob([standaloneHtml], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "PartVerify_Offline_Tool.html";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <RefreshCw className="text-white animate-spin w-8 h-8" />
+      </div>
+    );
+  }
 
   if (!isAuthorized) {
     return (
@@ -539,37 +440,49 @@ export default function App() {
           </div>
 
           <AnimatePresence mode="wait">
-            {loginStep === 'password' ? (
+            {!user ? (
               <motion.form 
-                key="pass"
+                key="login"
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
                 onSubmit={handleLogin} 
                 className="space-y-4"
               >
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-                  <input 
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Wachtwoord"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-600"
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                  </button>
+                <div className="space-y-4">
+                  <div className="relative">
+                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                    <input 
+                      type="email"
+                      placeholder="Emailadres"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-600"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                    <input 
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Wachtwoord"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-12 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-600"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    >
+                      {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
                 </div>
                 <button 
                   type="submit"
                   className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-[0.98]"
                 >
-                  Volgende
+                  Inloggen
                 </button>
               </motion.form>
             ) : (
@@ -601,10 +514,10 @@ export default function App() {
                 </button>
                 <button 
                   type="button"
-                  onClick={() => setLoginStep('password')}
+                  onClick={handleLogout}
                   className="w-full text-slate-500 text-sm hover:text-slate-300 transition-colors py-2"
                 >
-                  Terug naar wachtwoord
+                  Terug naar inloggen
                 </button>
               </motion.form>
             )}
@@ -649,25 +562,17 @@ export default function App() {
               <RefreshCw size={18} />
               Nieuwe Controle
             </button>
+            {userProfile?.role === 'admin' && (
+              <button 
+                onClick={() => setView(view === 'admin' ? 'dashboard' : 'admin')}
+                className={`p-2 rounded-lg transition-all ${view === 'admin' ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'text-slate-400 hover:text-amber-600 hover:bg-slate-50'}`}
+                title="Beheerderspaneel"
+              >
+                <Layers size={20} />
+              </button>
+            )}
             <button 
-              onClick={() => setView(view === 'dashboard' ? 'settings' : 'dashboard')}
-              className={`p-2 rounded-lg transition-all ${view === 'settings' ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-slate-400 hover:text-blue-600 hover:bg-slate-50'}`}
-              title="Instellingen"
-            >
-              <ShieldCheck size={20} />
-            </button>
-            <button 
-              onClick={downloadStandaloneTool}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-sm font-medium rounded-lg flex items-center gap-2 transition-all shadow-sm"
-            >
-              <Download size={18} />
-              Offline Tool Downloaden
-            </button>
-            <button 
-              onClick={() => {
-                sessionStorage.removeItem("isAuthorized");
-                setIsAuthorized(false);
-              }}
+              onClick={handleLogout}
               className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
             >
               <Lock size={20} />
@@ -922,13 +827,17 @@ export default function App() {
               </div>
             </div>
           </>
-        ) : (
+        ) : view === 'settings' ? (
           <SettingsView 
             isTfaEnabled={isTfaEnabled}
             tfaSecret={tfaSecret}
             onSetupTfa={setupTfa}
             onConfirmTfa={confirmTfa}
             onDisableTfa={disableTfa}
+            onBack={() => setView('dashboard')}
+          />
+        ) : (
+          <AdminView 
             onBack={() => setView('dashboard')}
           />
         )}
@@ -1043,6 +952,121 @@ function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDis
   );
 }
 
+function AdminView({ onBack }: any) {
+  const [users, setUsers] = useState<any[]>([]);
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [attempts, setAttempts] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadData = async () => {
+      const uDocs = await getDocs(collection(db, "users"));
+      setUsers(uDocs.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      const aDocs = await getDocs(query(collection(db, "login_attempts")));
+      setAttempts(aDocs.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+    };
+    loadData();
+  }, []);
+
+  const createUser = async () => {
+    // Note: Creating actual Firebase Auth users requires Admin SDK or custom logic
+    // For this simple demo, I'll alert that real user creation happens in Firebase Console
+    // but I'll add the profile to Firestore.
+    alert("Om beveiligingsredenen moet u de gebruiker eerst aanmaken in de Firebase Console (Authentication tab).\nZodra aangemaakt, voeg ik hier de rol toe aan Firestore.");
+    
+    // In a real app, this would be a cloud function
+    // But I'll simulate by adding the email to the users list
+    await addDoc(collection(db, "users"), {
+      email: newEmail,
+      role: "user",
+      createdAt: serverTimestamp()
+    });
+    setNewEmail("");
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="max-w-6xl mx-auto space-y-8"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold tracking-tight text-amber-600">Beheerderspaneel</h2>
+        <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-medium text-sm">Terug naar Dashboard</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
+          <h3 className="text-lg font-bold">Nieuwe Gebruiker Registreren</h3>
+          <div className="space-y-4">
+            <input 
+              type="email" 
+              placeholder="Emailadres" 
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl"
+            />
+            <button 
+              onClick={createUser}
+              className="w-full bg-amber-600 text-white py-4 rounded-xl font-bold hover:bg-amber-500 transition-all"
+            >
+              Gebruiker Toevoegen
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
+          <h3 className="text-lg font-bold">Actieve Gebruikers</h3>
+          <div className="space-y-3">
+            {users.map(u => (
+              <div key={u.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div>
+                  <div className="font-bold text-sm">{u.email}</div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-widest">{u.role}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {u.tfaEnabled && <ShieldCheck size={14} className="text-emerald-500" />}
+                  <button className="text-rose-500 p-1 hover:bg-rose-50 rounded"><XCircle size={16} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200 p-8">
+        <h3 className="text-lg font-bold mb-6">Recente Inlogpogingen</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                <th className="py-4">Datum/Tijd</th>
+                <th className="py-4">Email</th>
+                <th className="py-4">Status</th>
+                <th className="py-4">Locatie/Browser</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {attempts.map((a, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-all">
+                  <td className="py-4">{a.timestamp?.toDate().toLocaleString('nl-NL')}</td>
+                  <td className="py-4 font-bold">{a.email}</td>
+                  <td className="py-4">
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${a.status === 'attempted' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {a.status}
+                    </span>
+                  </td>
+                  <td className="py-4 text-slate-400 max-w-xs truncate">{a.userAgent}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
 function StatsCard({ label, value, icon, color }: { label: string, value: string | number, icon: React.ReactNode, color: string }) {
   return (
     <motion.div 

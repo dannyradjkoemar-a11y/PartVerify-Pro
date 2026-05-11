@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "App users with roles and 2FA settings",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "tfaEnabled": { "type": "boolean" },
+        "tfaSecret": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role"]
+    },
+    "LoginAttempt": {
+      "title": "Login Attempt",
+      "description": "Log of login attempts for notifications",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "status": { "type": "string" },
+        "ip": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Individual user profiles"
+    },
+    "login_attempts/{attemptId}": {
+      "schema": "LoginAttempt",
+      "description": "Historical log of login activity"
+    }
+  }
+}

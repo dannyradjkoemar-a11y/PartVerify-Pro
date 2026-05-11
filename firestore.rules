@@ -1,0 +1,41 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isAdmin() {
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      // Admins can see all, users can see themselves (except sensitive fields if we had them)
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Only admins can create or delete users
+      allow create, delete: if isAdmin();
+      
+      // Admins can update anything, users can update their own TFA settings
+      allow update: if isAdmin() || (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tfaSecret', 'tfaEnabled']));
+    }
+
+    // Login attempts (Public write, Admin read)
+    match /login_attempts/{attemptId} {
+      allow create: if true; // Allow logging even before full auth
+      allow read, list: if isAdmin();
+    }
+  }
+}
