@@ -373,6 +373,7 @@ export default function App() {
     return results.filter(r => 
       r.calc.description.toLowerCase().includes(q) || 
       r.calc.partNumber.toLowerCase().includes(q) ||
+      r.calc.id.includes(q) ||
       (r.match?.description.toLowerCase().includes(q))
     );
   }, [results, searchQuery]);
@@ -445,7 +446,8 @@ export default function App() {
       res.status === 'matched' ? 'OK' : 
       res.status === 'approved' ? 'GOEDGEKEURD' :
       res.status === 'deviation' ? 'AFWIJKING' : 'ONTBREEKT',
-      `${res.calc.description}\nID: ${res.calc.id}`,
+      res.calc.id,
+      res.calc.description,
       res.calc.partNumber,
       `EUR ${res.calc.price.toFixed(2)}`,
       res.status === 'approved' ? `EUR ${res.manualPrice?.toFixed(2)}*` : (res.match ? `EUR ${res.match.price.toFixed(2)}` : '—'),
@@ -454,17 +456,18 @@ export default function App() {
 
     autoTable(doc, {
       startY: 104,
-      head: [['Status', 'Onderdeel', 'Partnummer', 'Calc. Prijs', 'Factuur Prijs', 'Verschil']],
+      head: [['Status', 'Pos.', 'Onderdeel', 'Partnummer', 'Calc. Prijs', 'Factuur Prijs', 'Verschil']],
       body: tableData,
       headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 9, fontStyle: 'bold' },
       bodyStyles: { fontSize: 8 },
       columnStyles: {
-        0: { cellWidth: 25 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 30 },
-        3: { halign: 'right' },
+        0: { cellWidth: 22 },
+        1: { cellWidth: 15 },
+        2: { cellWidth: 45 },
+        3: { cellWidth: 30 },
         4: { halign: 'right' },
-        5: { halign: 'right', fontStyle: 'bold' }
+        5: { halign: 'right' },
+        6: { halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 0) {
@@ -758,6 +761,7 @@ export default function App() {
                   <thead>
                     <tr className="bg-slate-50/50 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
                       <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-center">Pos.</th>
                       <th className="px-6 py-4">Onderdeel (Calculatie)</th>
                       <th className="px-6 py-4">Partnummer</th>
                       <th className="px-6 py-4">Prijs Calc.</th>
@@ -799,9 +803,16 @@ export default function App() {
                                 </div>
                               )}
                             </td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-400 text-center">
+                              {res.calc.id}
+                            </td>
                             <td className="px-6 py-4">
                               <div className="font-semibold text-slate-800">{res.calc.description}</div>
-                              <div className="text-[10px] text-slate-400 font-mono">ID: {res.calc.id}</div>
+                              {res.isSemantic && (
+                                <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
+                                  Semantische Match
+                                </span>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               <code className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px] font-mono whitespace-nowrap">
