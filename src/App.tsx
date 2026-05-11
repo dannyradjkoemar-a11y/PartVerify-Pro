@@ -61,7 +61,7 @@ import firebaseConfig from "../firebase-applet-config.json";
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -85,6 +85,22 @@ export default function App() {
   const [editingCell, setEditingCell] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
+
+  const handleFirestoreError = (error: any, operation: string, path: string) => {
+    const errInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      code: error.code,
+      operation,
+      path,
+      auth: {
+        uid: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        emailVerified: auth.currentUser?.emailVerified
+      }
+    };
+    console.error(`[Firestore Error] ${operation} on ${path}:`, JSON.stringify(errInfo));
+    return errInfo;
+  };
 
   // Monitor auth state
   useEffect(() => {
@@ -121,17 +137,22 @@ export default function App() {
                 tfaEnabled: false,
                 createdAt: serverTimestamp()
               };
-              await setDoc(doc(db, "users", u.uid), initialProfile);
-              setUserProfile(initialProfile);
-              setIsAuthorized(true);
-              sessionStorage.setItem("tfa_authenticated", u.uid);
+              try {
+                await setDoc(doc(db, "users", u.uid), initialProfile);
+                setUserProfile(initialProfile);
+                setIsAuthorized(true);
+                sessionStorage.setItem("tfa_authenticated", u.uid);
+              } catch (setErr) {
+                handleFirestoreError(setErr, 'write', `users/${u.uid}`);
+                await signOut(auth);
+              }
             } else {
               await signOut(auth);
               alert("Toegang geweigerd. Neem contact op met de beheerder.");
             }
           }
         } catch (err) {
-          console.error("Auth state error:", err);
+          handleFirestoreError(err, 'get', `users/${u.uid}`);
           await signOut(auth);
         }
       } else {
@@ -151,12 +172,17 @@ export default function App() {
     
     setAuthLoading(true);
     try {
-      await addDoc(collection(db, "login_attempts"), {
-        email: cleanEmail,
-        timestamp: serverTimestamp(),
-        userAgent: navigator.userAgent,
-        status: "attempted"
-      });
+      try {
+        await addDoc(collection(db, "login_attempts"), {
+          email: cleanEmail,
+          timestamp: serverTimestamp(),
+          userAgent: navigator.userAgent,
+          status: "attempted"
+        });
+      } catch (logErr) {
+        handleFirestoreError(logErr, 'create', 'login_attempts');
+        // Continue login even if logging fails
+      }
 
       try {
         await signInWithEmailAndPassword(auth, cleanEmail, password);
@@ -185,12 +211,16 @@ export default function App() {
       
       alert(message);
       
-      await addDoc(collection(db, "login_attempts"), {
-        email: cleanEmail,
-        timestamp: serverTimestamp(),
-        status: "failed",
-        error: error.message || error.code
-      });
+      try {
+        await addDoc(collection(db, "login_attempts"), {
+          email: cleanEmail,
+          timestamp: serverTimestamp(),
+          status: "failed",
+          error: error.message || error.code
+        });
+      } catch (logErr) {
+        handleFirestoreError(logErr, 'create', 'login_attempts');
+      }
     } finally {
       setAuthLoading(false);
     }
