@@ -89,6 +89,8 @@ export default function App() {
 
   const [loading, setLoading] = useState(true);
 
+  const [caseNumber, setCaseNumber] = useState("");
+  const [licensePlate, setLicensePlate] = useState("");
   const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
@@ -408,6 +410,8 @@ export default function App() {
     setEditingCell(null);
     setRemovedPartIds(new Set());
     setManualParts([]);
+    setLicensePlate("");
+    setCaseNumber("");
   };
 
   const toggleRemovePart = (id: string) => {
@@ -465,10 +469,13 @@ export default function App() {
     doc.setFontSize(10);
     doc.setTextColor(100);
     doc.text(`Verificatie Verslag - Datum: ${dateStr} ${timeStr}`, 14, 28);
+    if (licensePlate) doc.text(`Kenteken: ${licensePlate.toUpperCase()}`, 14, 33);
+    if (caseNumber) doc.text(`Dossiernummer: ${caseNumber}`, 14, 38);
+    
     doc.setFont("helvetica", "bold");
-    doc.text("Ontwikkeld door: Danny Radjkoemar", 14, 33);
+    doc.text("Ontwikkeld door: Danny Radjkoemar", 120, 20);
     doc.setFont("helvetica", "normal");
-    doc.text("Onderdelen Controle Systeem", 14, 38);
+    doc.text("Onderdelen Controle Systeem", 120, 25);
 
     // Summary Stats
     doc.setDrawColor(226, 232, 240);
@@ -725,6 +732,35 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-12">
         {view === 'dashboard' ? (
           <>
+            {/* Dossier Informatie */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Kenteken</label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <div className="w-1.5 h-6 bg-blue-600 rounded-full mr-2" />
+                  </div>
+                  <input 
+                    type="text"
+                    placeholder="Bv. AB-123-C"
+                    className="w-full pl-6 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-slate-800 uppercase focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal"
+                    value={licensePlate}
+                    onChange={(e) => setLicensePlate(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Dossiernummer</label>
+                <input 
+                  type="text"
+                  placeholder="Invoeren dossiernummer..."
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal"
+                  value={caseNumber}
+                  onChange={(e) => setCaseNumber(e.target.value)}
+                />
+              </div>
+            </div>
+
             {/* Stats Dashboard */}
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <StatsCard 
