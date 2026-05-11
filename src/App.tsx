@@ -91,50 +91,48 @@ export default function App() {
     return onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
-        const userDoc = await getDoc(doc(db, "users", u.uid));
-        if (userDoc.exists()) {
-          const profile = userDoc.data();
-          setUserProfile(profile);
-          setIsTfaEnabled(profile.tfaEnabled || false);
-          setTfaSecret(profile.tfaSecret || null);
-          
-          // Handle authorization based on 2FA settings
-          if (profile.tfaEnabled) {
-            if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
-              setIsAuthorized(true);
+        try {
+          const userDoc = await getDoc(doc(db, "users", u.uid));
+          if (userDoc.exists()) {
+            const profile = userDoc.data();
+            setUserProfile(profile);
+            setIsTfaEnabled(profile.tfaEnabled || false);
+            setTfaSecret(profile.tfaSecret || null);
+            
+            // Handle authorization based on 2FA settings
+            if (profile.tfaEnabled) {
+              if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
+                setIsAuthorized(true);
+              } else {
+                setIsAuthorized(false);
+                setLoginStep('tfa');
+              }
             } else {
-              setIsAuthorized(false);
-              setLoginStep('tfa');
+              setIsAuthorized(true);
+              sessionStorage.setItem("tfa_authenticated", u.uid);
             }
           } else {
-            setIsAuthorized(true);
-            // Even if TFA is disabled, we set this for consistency
-            sessionStorage.setItem("tfa_authenticated", u.uid);
-          }
-        } else {
-          // New user (should only happen via Admin creation usually, but first one can be special)
-          // For now, if it's the outlook email or the owner's gmail, we bootstrap
-          const lowerEmail = u.email?.toLowerCase();
-          if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
-            const initialProfile = {
-              email: u.email,
-              role: "admin",
-              tfaEnabled: false,
-              createdAt: serverTimestamp()
-            };
-            try {
+            // New user (should only happen via Admin creation usually, but first one can be special)
+            const lowerEmail = u.email?.toLowerCase();
+            if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
+              const initialProfile = {
+                email: u.email,
+                role: "admin",
+                tfaEnabled: false,
+                createdAt: serverTimestamp()
+              };
               await setDoc(doc(db, "users", u.uid), initialProfile);
               setUserProfile(initialProfile);
               setIsAuthorized(true);
               sessionStorage.setItem("tfa_authenticated", u.uid);
-            } catch (err) {
-              console.error("Bootstrap failed:", err);
+            } else {
               await signOut(auth);
+              alert("Toegang geweigerd. Neem contact op met de beheerder.");
             }
-          } else {
-            await signOut(auth);
-            alert("Toegang geweigerd. Neem contact op met de beheerder.");
           }
+        } catch (err) {
+          console.error("Auth state error:", err);
+          await signOut(auth);
         }
       } else {
         setUser(null);
@@ -153,7 +151,6 @@ export default function App() {
     
     setAuthLoading(true);
     try {
-      // Log attempt to Firestore
       await addDoc(collection(db, "login_attempts"), {
         email: cleanEmail,
         timestamp: serverTimestamp(),
@@ -164,20 +161,14 @@ export default function App() {
       try {
         await signInWithEmailAndPassword(auth, cleanEmail, password);
       } catch (authError: any) {
-        console.warn("Auth error:", authError.code, authError.message);
-        
         // If it's the admin email or owner, try to create the account if login fails
         const lowerEmail = cleanEmail.toLowerCase();
-        if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
+        if ((authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential' || authError.code === 'auth/invalid-login-credentials') && (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com")) {
           try {
             await createUserWithEmailAndPassword(auth, cleanEmail, password);
           } catch (createError: any) {
-            console.error("Bootstrap error:", createError.code);
             if (createError.code === 'auth/email-already-in-use') {
               throw new Error("Onjuist wachtwoord.");
-            }
-            if (createError.code === 'auth/operation-not-allowed') {
-              throw new Error("Email/Wachtwoord login is niet ingeschakeld in Firebase.");
             }
             throw createError;
           }
@@ -186,11 +177,10 @@ export default function App() {
         }
       }
     } catch (error: any) {
-      console.error("Login UI error:", error);
+      console.error("Login error:", error);
       let message = "Inloggen mislukt.";
       if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials') message = "Onjuist wachtwoord.";
       if (error.code === 'auth/user-not-found') message = "Gebruiker niet gevonden.";
-      if (error.message?.includes("niet ingeschakeld")) message = error.message;
       if (error.message === "Onjuist wachtwoord.") message = "Onjuist wachtwoord.";
       
       alert(message);

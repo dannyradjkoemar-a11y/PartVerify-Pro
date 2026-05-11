@@ -25,9 +25,9 @@ service cloud.firestore {
       // Admins can see all, users can see themselves
       allow read: if isOwner(userId) || isAdmin();
       
-      // Allow bootstrapping: the designated admin can create their own doc
+      // Allow bootstrapping: the designated admins can create their own doc
       // Others require admin rights
-      allow create: if isAdmin() || (isOwner(userId) && request.auth.token.email.lower() == 'partverify-pro@outlook.com');
+      allow create: if isAdmin() || (isOwner(userId) && (request.auth.token.email.lower() == 'partverify-pro@outlook.com' || request.auth.token.email.lower() == 'dannyradjkoemar@gmail.com'));
       
       allow delete: if isAdmin();
       
