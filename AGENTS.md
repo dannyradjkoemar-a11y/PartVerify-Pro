@@ -11,7 +11,6 @@ PartVerify Pro is een gespecialiseerde tool voor automotive professionals om ein
 - **Instellingen**: Speciaal dashboard voor accountbeveiliging en systeemconfiguratie.
 - **Handmatige Overrides**: Mogelijkheid om prijzen handmatig aan te passen door op een prijsveld te klikken en direct een nieuwe waarde in te voeren.
 - **PDF Rapportage**: Genereren van een professioneel PDF-verslag inclusief samenvatting, totalen en statistieken.
-- **Offline Tool**: Volledig functionele standalone HTML-versie voor lokaal gebruik, inclusief alle parsing-intelligentie.
 
 ## Technische Keuzes
 - **Framework**: React 18 met Tailwind CSS voor styling.

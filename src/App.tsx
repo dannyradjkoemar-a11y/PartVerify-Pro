@@ -11,7 +11,6 @@ import {
   FileText, 
   ClipboardCheck, 
   Search, 
-  Download, 
   Lock, 
   ShieldCheck,
   Package,
@@ -39,6 +38,7 @@ import { initializeApp } from "firebase/app";
 import { 
   getAuth, 
   signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
   onAuthStateChanged, 
   signOut,
   User as FirebaseUser 
@@ -69,6 +69,7 @@ export default function App() {
   const [tfaCode, setTfaCode] = useState("");
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(false);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loginStep, setLoginStep] = useState<'password' | 'tfa'>('password');
@@ -97,27 +98,39 @@ export default function App() {
           setIsTfaEnabled(profile.tfaEnabled || false);
           setTfaSecret(profile.tfaSecret || null);
           
-          // Only authorize if 2FA was already completed in this session
-          if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
-            setIsAuthorized(true);
+          // Handle authorization based on 2FA settings
+          if (profile.tfaEnabled) {
+            if (sessionStorage.getItem("tfa_authenticated") === u.uid) {
+              setIsAuthorized(true);
+            } else {
+              setIsAuthorized(false);
+              setLoginStep('tfa');
+            }
           } else {
-            setIsAuthorized(false);
-            setLoginStep('tfa');
+            setIsAuthorized(true);
+            // Even if TFA is disabled, we set this for consistency
+            sessionStorage.setItem("tfa_authenticated", u.uid);
           }
         } else {
           // New user (should only happen via Admin creation usually, but first one can be special)
-          // For now, if it's the outlook email, we bootstrap
-          if (u.email === "partverify-pro@outlook.com") {
+          // For now, if it's the outlook email or the owner's gmail, we bootstrap
+          const lowerEmail = u.email?.toLowerCase();
+          if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
             const initialProfile = {
               email: u.email,
               role: "admin",
               tfaEnabled: false,
               createdAt: serverTimestamp()
             };
-            await setDoc(doc(db, "users", u.uid), initialProfile);
-            setUserProfile(initialProfile);
-            setIsAuthorized(true);
-            sessionStorage.setItem("tfa_authenticated", u.uid);
+            try {
+              await setDoc(doc(db, "users", u.uid), initialProfile);
+              setUserProfile(initialProfile);
+              setIsAuthorized(true);
+              sessionStorage.setItem("tfa_authenticated", u.uid);
+            } catch (err) {
+              console.error("Bootstrap failed:", err);
+              await signOut(auth);
+            }
           } else {
             await signOut(auth);
             alert("Toegang geweigerd. Neem contact op met de beheerder.");
@@ -135,25 +148,61 @@ export default function App() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !password) return;
+    
+    setAuthLoading(true);
     try {
-      // Log attempt
+      // Log attempt to Firestore
       await addDoc(collection(db, "login_attempts"), {
-        email,
+        email: cleanEmail,
         timestamp: serverTimestamp(),
-        status: "attempted",
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        status: "attempted"
       });
 
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      // Auth change listener will handle the rest
+      try {
+        await signInWithEmailAndPassword(auth, cleanEmail, password);
+      } catch (authError: any) {
+        console.warn("Auth error:", authError.code, authError.message);
+        
+        // If it's the admin email or owner, try to create the account if login fails
+        const lowerEmail = cleanEmail.toLowerCase();
+        if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
+          try {
+            await createUserWithEmailAndPassword(auth, cleanEmail, password);
+          } catch (createError: any) {
+            console.error("Bootstrap error:", createError.code);
+            if (createError.code === 'auth/email-already-in-use') {
+              throw new Error("Onjuist wachtwoord.");
+            }
+            if (createError.code === 'auth/operation-not-allowed') {
+              throw new Error("Email/Wachtwoord login is niet ingeschakeld in Firebase.");
+            }
+            throw createError;
+          }
+        } else {
+          throw authError;
+        }
+      }
     } catch (error: any) {
-      alert("Inloggen mislukt: " + (error.message || "Onbekende fout"));
+      console.error("Login UI error:", error);
+      let message = "Inloggen mislukt.";
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential' || error.code === 'auth/invalid-login-credentials') message = "Onjuist wachtwoord.";
+      if (error.code === 'auth/user-not-found') message = "Gebruiker niet gevonden.";
+      if (error.message?.includes("niet ingeschakeld")) message = error.message;
+      if (error.message === "Onjuist wachtwoord.") message = "Onjuist wachtwoord.";
+      
+      alert(message);
+      
       await addDoc(collection(db, "login_attempts"), {
-        email,
+        email: cleanEmail,
         timestamp: serverTimestamp(),
         status: "failed",
-        error: error.message
+        error: error.message || error.code
       });
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -480,9 +529,10 @@ export default function App() {
                 </div>
                 <button 
                   type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-[0.98]"
+                  disabled={authLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
-                  Inloggen
+                  {authLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Inloggen"}
                 </button>
               </motion.form>
             ) : (
