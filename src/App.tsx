@@ -712,13 +712,6 @@ export default function App() {
               <ShieldCheck size={12} />
               Sessie Actief: Danny
             </div>
-            <button 
-              onClick={handleResetAll}
-              className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 text-sm font-bold rounded-lg flex items-center gap-2 transition-all"
-            >
-              <RefreshCw size={18} />
-              Nieuwe Controle
-            </button>
             {userProfile?.role === 'admin' && (
               <button 
                 onClick={() => setView(view === 'admin' ? 'dashboard' : 'admin')}
@@ -740,83 +733,125 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-12">
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         {view === 'dashboard' ? (
           <>
-            {/* Dossier Informatie */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Kenteken</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <div className="w-1.5 h-6 bg-blue-600 rounded-full mr-2" />
+            {/* Top Bar: Dossier Info */}
+            <div className="flex flex-col lg:flex-row gap-4 items-stretch">
+              <div className="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Kenteken</label>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
+                    <input 
+                      type="text"
+                      placeholder="Kenteken (bv. AB-123-C)"
+                      className="w-full bg-transparent text-lg font-black text-slate-800 uppercase focus:outline-none placeholder:text-slate-200"
+                      value={licensePlate}
+                      onChange={(e) => setLicensePlate(e.target.value)}
+                    />
                   </div>
+                </div>
+                <div className="w-px h-10 bg-slate-100 mx-2 hidden md:block" />
+                <div className="flex-[1.5]">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Dossiernummer</label>
                   <input 
                     type="text"
-                    placeholder="Bv. AB-123-C"
-                    className="w-full pl-6 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-slate-800 uppercase focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal"
-                    value={licensePlate}
-                    onChange={(e) => setLicensePlate(e.target.value)}
+                    placeholder="Invoeren dossiernummer..."
+                    className="w-full bg-transparent text-lg font-black text-slate-800 focus:outline-none placeholder:text-slate-200"
+                    value={caseNumber}
+                    onChange={(e) => setCaseNumber(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">Dossiernummer</label>
-                <input 
-                  type="text"
-                  placeholder="Invoeren dossiernummer..."
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-lg font-black text-slate-800 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300 placeholder:font-normal"
-                  value={caseNumber}
-                  onChange={(e) => setCaseNumber(e.target.value)}
-                />
+
+              <div className="flex items-center gap-4">
+                 <button 
+                  onClick={handleResetAll}
+                  className="px-6 py-4 bg-slate-800 text-white font-bold rounded-2xl hover:bg-slate-700 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 active:scale-95"
+                >
+                  <RefreshCw size={18} />
+                  <span>Nieuwe Controle</span>
+                </button>
               </div>
             </div>
 
-            {/* Stats Dashboard */}
-            <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
-              <StatsCard 
-                label="Calculatie" 
-                value={calculationParts.length} 
-                icon={<FileText className="text-blue-600" />} 
-                color="bg-blue-50 text-blue-700" 
-              />
-              <StatsCard 
-                label="Match OK" 
-                value={stats.matched} 
-                icon={<CheckCircle2 className="text-emerald-600" />} 
-                color="bg-emerald-50 text-emerald-700" 
-              />
-              <StatsCard 
-                label="Handmatig" 
-                value={stats.approved} 
-                icon={<ShieldCheck className="text-amber-600" />} 
-                color="bg-amber-50 text-amber-700" 
-              />
-              <StatsCard 
-                label="Afwijking" 
-                value={stats.deviations} 
-                icon={<AlertCircle className="text-rose-600" />} 
-                color="bg-rose-50 text-rose-700" 
-              />
-              <StatsCard 
-                label="Ontbrekend" 
-                value={stats.missing} 
-                icon={<XCircle className="text-rose-600" />} 
-                color="bg-rose-50 text-rose-700" 
-              />
-              <StatsCard 
-                label="Prijsverschil" 
-                value={`€ ${stats.totalPriceDiff.toFixed(2)}`} 
-                icon={<RefreshCw className={`text-amber-600 ${stats.totalPriceDiff !== 0 ? 'animate-spin-slow' : ''}`} />} 
-                color="bg-amber-50 text-amber-700" 
-              />
-              <StatsCard 
-                label="Totaal Bedrag" 
-                value={`€ ${stats.totalVerifiedAmount.toFixed(2)}`} 
-                icon={<ClipboardCheck className="text-blue-600" />} 
-                color="bg-blue-600 text-white shadow-lg shadow-blue-200" 
-              />
+            {/* Main Stats: Financials vs Breakdown */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Primary Financial Overview */}
+              <div className="lg:col-span-1 grid grid-cols-1 gap-4">
+                <div className="bg-blue-600 p-6 rounded-3xl shadow-xl shadow-blue-100 text-white relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-125 transition-transform duration-700">
+                    <ClipboardCheck size={120} />
+                  </div>
+                  <div className="relative z-10 space-y-4">
+                    <p className="text-xs font-bold uppercase tracking-widest text-blue-100">Totaal Geverifieerd</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-2xl font-bold opacity-80">€</span>
+                      <h3 className="text-5xl font-black tracking-tighter">{stats.totalVerifiedAmount.toFixed(2)}</h3>
+                    </div>
+                    <div className="pt-4 border-t border-white/10 flex items-center justify-between text-blue-100">
+                      <span className="text-xs font-medium">Inclusief aangepaste regels</span>
+                      <CheckCircle2 size={20} className="text-blue-200" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prijsverschil</p>
+                    <div className="flex items-center gap-2">
+                       <h3 className={`text-2xl font-black ${stats.totalPriceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        € {stats.totalPriceDiff.toFixed(2)}
+                      </h3>
+                      <RefreshCw size={18} className={`text-amber-400 ${stats.totalPriceDiff !== 0 ? 'animate-spin-slow' : ''}`} />
+                    </div>
+                  </div>
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${stats.totalPriceDiff > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                    <AlertCircle size={24} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Breakdown Grid */}
+              <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4">
+                <StatsCard 
+                  label="Totaal Regels" 
+                  value={calculationParts.length} 
+                  icon={<FileText className="text-blue-600" />} 
+                  color="bg-blue-50 text-blue-700" 
+                />
+                <StatsCard 
+                  label="Match OK" 
+                  value={stats.matched} 
+                  icon={<CheckCircle2 className="text-emerald-600" />} 
+                  color="bg-emerald-50 text-emerald-700" 
+                />
+                <StatsCard 
+                  label="Handmatig" 
+                  value={stats.approved} 
+                  icon={<ShieldCheck className="text-amber-600" />} 
+                  color="bg-amber-50 text-amber-700" 
+                />
+                <StatsCard 
+                  label="Afwijking" 
+                  value={stats.deviations} 
+                  icon={<AlertCircle className="text-rose-600" />} 
+                  color="bg-rose-50 text-rose-700" 
+                />
+                <StatsCard 
+                  label="Ontbrekend" 
+                  value={stats.missing} 
+                  icon={<XCircle className="text-rose-600" />} 
+                  color="bg-rose-50 text-rose-700" 
+                />
+                <div className="bg-slate-50 p-6 rounded-3xl border border-dashed border-slate-200 flex flex-col justify-center items-center text-center space-y-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Calculatie Bron</p>
+                  <p className="text-xs font-bold text-slate-600">Automatisering Actief</p>
+                </div>
+              </div>
             </div>
+
 
             {/* Inputs - Stacked vertically for clarity as requested */}
             <div className="space-y-10">
@@ -838,50 +873,65 @@ export default function App() {
 
             {/* Report Section */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-bold">Verificatie Verslag</h2>
-                  <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-full">
-                    {filteredResults.length} Rijen
-                  </span>
-                  <button 
-                    onClick={addManualPart}
-                    className="ml-2 flex items-center gap-2 px-3 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 text-xs font-bold rounded-lg transition-all shadow-sm active:scale-95"
-                  >
-                    <Plus size={14} />
-                    Regel Toevoegen
-                  </button>
-                  <button 
-                    onClick={downloadPDF}
-                    disabled={results.length === 0}
-                    className="ml-2 flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 hover:border-blue-400 hover:text-blue-600 text-slate-600 text-xs font-bold rounded-lg transition-all shadow-sm active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <FileDown size={14} />
-                    PDF Rapportage
-                  </button>
-                  <label className="ml-4 flex items-center gap-2 cursor-pointer group">
-                    <div className="relative inline-flex items-center">
-                      <input 
-                        type="checkbox" 
-                        checked={showRemoved} 
-                        onChange={(e) => setShowRemoved(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              <div className="p-6 border-b border-slate-100 space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-100">
+                      <ClipboardCheck size={20} />
                     </div>
-                    <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors">Toon Verwijderd</span>
-                  </label>
+                    <div>
+                      <h2 className="text-lg font-bold leading-none">Verificatie Verslag</h2>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                        {filteredResults.length} Resultaten gevonden
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button 
+                      onClick={addManualPart}
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95"
+                    >
+                      <Plus size={16} />
+                      Regel Toevoegen
+                    </button>
+                    <button 
+                      onClick={downloadPDF}
+                      disabled={results.length === 0}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-xl transition-all shadow-lg shadow-slate-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <FileDown size={16} />
+                      PDF Rapportage
+                    </button>
+                  </div>
                 </div>
-                
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-                  <input 
-                    type="text" 
-                    placeholder="Zoek op onderdeel of nummer..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-full md:w-80 transition-all"
-                  />
+
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-4 border-t border-slate-50">
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className="relative inline-flex items-center">
+                        <input 
+                          type="checkbox" 
+                          checked={showRemoved} 
+                          onChange={(e) => setShowRemoved(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors uppercase tracking-tight">Verwijderde regels tonen</span>
+                    </label>
+                  </div>
+
+                  <div className="relative flex-1 md:max-w-md">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+                    <input 
+                      type="text" 
+                      placeholder="Zoek op onderdeel, nummer of ID..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/50 w-full transition-all"
+                    />
+                  </div>
                 </div>
               </div>
 
