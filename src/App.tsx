@@ -111,6 +111,7 @@ export default function App() {
 
   // Monitor auth state
   useEffect(() => {
+    document.title = "PartVerify Pro - De site voor Professionals";
     return onAuthStateChanged(auth, async (u) => {
       if (u) {
         setUser(u);
