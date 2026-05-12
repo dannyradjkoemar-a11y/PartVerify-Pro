@@ -22,7 +22,8 @@ import {
   FileDown,
   LogOut,
   Trash2,
-  Plus
+  Plus,
+  CarFront
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -588,8 +589,11 @@ export default function App() {
           className="w-full max-w-md bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl"
         >
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(37,99,235,0.4)]">
-              <ShieldCheck className="text-white w-10 h-10" />
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(37,99,235,0.4)] relative">
+              <CarFront className="text-white w-10 h-10" />
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-sm">
+                <ShieldCheck className="text-blue-600 w-4 h-4" />
+              </div>
             </div>
             <h1 className="text-3xl font-bold text-white tracking-tight">PartVerify Pro</h1>
             <p className="text-slate-400 mt-2 text-center">
@@ -696,8 +700,11 @@ export default function App() {
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-              <Package className="text-white w-6 h-6" />
+            <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 relative">
+              <CarFront className="text-white w-6 h-6" />
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-md p-0.5 shadow-sm">
+                <ClipboardCheck className="text-blue-600 w-3 h-3" />
+              </div>
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">PartVerify Pro</h1>
