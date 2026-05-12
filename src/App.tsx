@@ -350,7 +350,9 @@ export default function App() {
       if (removedPartIds.has(calcPart.id)) {
         status = 'removed';
       } else if (manualPrice !== undefined) {
-        status = 'approved';
+        // If manual price equals calculation price, it's effectively "OK"
+        const manualDiff = manualPrice - calcPart.price;
+        status = Math.abs(manualDiff) < 0.005 ? 'matched' : 'approved';
       } else if (finalMatch) {
         status = hasRealDiff ? 'deviation' : 'matched';
       }
