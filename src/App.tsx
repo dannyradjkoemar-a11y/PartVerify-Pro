@@ -23,7 +23,8 @@ import {
   LogOut,
   Trash2,
   Plus,
-  CarFront
+  CarFront,
+  CheckSquare
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -81,6 +82,7 @@ export default function App() {
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [struckThroughIds, setStruckThroughIds] = useState<Set<string>>(new Set());
 
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
@@ -466,9 +468,19 @@ export default function App() {
     setManualOverrides({});
     setEditingCell(null);
     setRemovedPartIds(new Set());
+    setStruckThroughIds(new Set());
     setManualParts([]);
     setLicensePlate("");
     setCaseNumber("");
+  };
+
+  const toggleStrikethrough = (id: string) => {
+    setStruckThroughIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
 
   const toggleRemovePart = (id: string) => {
@@ -836,13 +848,21 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={downloadPDF}
+                  disabled={results.length === 0}
+                  className="px-6 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 active:scale-95 disabled:opacity-50"
+                >
+                  <FileDown size={18} />
+                  <span>PDF Rapport</span>
+                </button>
                  <button 
                   onClick={handleResetAll}
-                  className="px-6 py-4 bg-slate-800 text-white font-bold rounded-2xl hover:bg-slate-700 transition-all shadow-lg shadow-slate-200 flex items-center gap-2 active:scale-95"
+                  className="px-6 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95"
                 >
                   <RefreshCw size={18} />
-                  <span>Nieuwe Controle</span>
+                  <span>Reset</span>
                 </button>
               </div>
             </div>
@@ -966,14 +986,6 @@ export default function App() {
                       <Plus size={16} />
                       Regel Toevoegen
                     </button>
-                    <button 
-                      onClick={downloadPDF}
-                      disabled={results.length === 0}
-                      className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-xl transition-all shadow-lg shadow-slate-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <FileDown size={16} />
-                      PDF Rapportage
-                    </button>
                   </div>
                 </div>
 
@@ -1029,7 +1041,7 @@ export default function App() {
                             initial={{ opacity: 0, x: -10 }}
                             animate={{ opacity: 1, x: 0 }}
                             transition={{ delay: i * 0.02 }}
-                            className={`group hover:bg-slate-50/80 transition-all ${res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''}`}
+                            className={`group hover:bg-slate-50/80 transition-all ${res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''} ${struckThroughIds.has(res.calc.id) ? 'opacity-40 grayscale bg-slate-50/30' : ''}`}
                           >
                             <td className="px-6 py-4 text-xs font-bold uppercase tracking-tight">
                               {res.status === 'matched' ? (
@@ -1071,7 +1083,7 @@ export default function App() {
                                   className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               ) : (
-                                <div className="font-semibold text-slate-800 text-sm">{res.calc.description}</div>
+                                <div className={`font-semibold text-slate-800 text-sm ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>{res.calc.description}</div>
                               )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
@@ -1174,7 +1186,16 @@ export default function App() {
                                 <span className="text-slate-300 font-bold">—</span>
                               )}
                             </td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
+                              {(res.status === 'approved' || res.status === 'matched') && (
+                                <button 
+                                  onClick={() => toggleStrikethrough(res.calc.id)}
+                                  className={`p-2 rounded-lg transition-all ${struckThroughIds.has(res.calc.id) ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                  title={struckThroughIds.has(res.calc.id) ? "Standaard weergave" : "Doorstrepen"}
+                                >
+                                  <CheckSquare size={18} />
+                                </button>
+                              )}
                               <button 
                                 onClick={() => {
                                   if (res.calc.id.startsWith('MAN-')) {
