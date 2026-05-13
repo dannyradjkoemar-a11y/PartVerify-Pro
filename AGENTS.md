@@ -6,7 +6,7 @@ PartVerify Pro is een gespecialiseerde tool voor automotive professionals om ein
 
 ### Belangrijkste Functies
 - **Automatische Verificatie**: Matchen van onderdelen op basis van onderdeelnummer (genormaliseerd) en semantische beschrijving (bijv. "rooster" vs "grille").
-- **Opdrachtgevers-overrides**: Automatische goedkeuring van prijzen op basis van specifieke prijslijsten per opdrachtgever (instelbaar via het beheerderspaneel).
+- **Opdrachtgevers-overrides**: Automatische goedkeuring van prijzen op basis van specifieke prijslijsten per opdrachtgever. Ondersteunt meerdere varianten per onderdeelnummer (bijv. luxe vs. standaard kentekenplaten).
 - **Prijs Parsing**: Geavanceerde herkenning van valutanotaties (bijv. `79.28` of `1.234,56`), geoptimaliseerd voor uitdraaien uit schade-calculatiesystemen.
 - **Beveiliging**: Twee-staps verificatie (2FA) via TOTP (bijv. Microsoft Authenticator) instelbaar vanuit de instellingenpagina.
 - **Instellingen**: Speciaal dashboard voor accountbeveiliging en systeemconfiguratie.

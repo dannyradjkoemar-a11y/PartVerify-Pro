@@ -86,7 +86,7 @@ export default function App() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [clientPrices, setClientPrices] = useState<Record<string, number>>({});
+  const [clientPrices, setClientPrices] = useState<Record<string, number[]>>({});
 
   const [tfaSecret, setTfaSecret] = useState<string | null>(null);
   const [isTfaEnabled, setIsTfaEnabled] = useState<boolean>(false);
@@ -210,10 +210,12 @@ export default function App() {
       const loadPrices = async () => {
         try {
           const snapshot = await getDocs(collection(db, "clients", selectedClientId, "prices"));
-          const prices: Record<string, number> = {};
+          const prices: Record<string, number[]> = {};
           snapshot.docs.forEach(d => {
             const data = d.data();
-            prices[normalizePartNumber(data.partNumber)] = data.price;
+            const norm = normalizePartNumber(data.partNumber);
+            if (!prices[norm]) prices[norm] = [];
+            prices[norm].push(data.price);
           });
           setClientPrices(prices);
         } catch (err) {
@@ -383,8 +385,8 @@ export default function App() {
       const overrideKey = `${calcPart.id}-${calcPart.partNumber}`;
       const manualPrice = manualOverrides[overrideKey];
 
-      const clientPrice = clientPrices[normalizedCalc];
-      const matchesClientPrice = clientPrice !== undefined && Math.abs(clientPrice - calcPart.price) < 0.005;
+      const clientPriceList = clientPrices[normalizedCalc] || [];
+      const matchesClientPrice = clientPriceList.some(p => Math.abs(p - calcPart.price) < 0.005);
 
       const priceDiff = manualPrice !== undefined 
         ? manualPrice - calcPart.price 
@@ -1522,6 +1524,9 @@ function AdminView({ onBack }: any) {
               <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-8">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold">Prijslijst: {clients.find(c => c.id === selectedAdminClient)?.name}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase bg-slate-100 px-3 py-1 rounded-full">
+                    Tip: Voeg meerdere regels toe voor verschillende varianten (bv. luxe/normaal)
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
