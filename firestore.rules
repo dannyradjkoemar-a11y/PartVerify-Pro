@@ -40,5 +40,16 @@ service cloud.firestore {
       allow create: if true; // Allow logging even before full auth
       allow read, list: if isAdmin();
     }
+
+    // Clients & Price Lists
+    match /clients/{clientId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+      
+      match /prices/{priceId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+    }
   }
 }

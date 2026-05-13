@@ -23,6 +23,28 @@
         "status": { "type": "string" },
         "ip": { "type": "string" }
       }
+    },
+    "Client": {
+      "title": "Client",
+      "description": "A client organization like an insurance company or fleet owner",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name"]
+    },
+    "ClientPrice": {
+      "title": "Client Price",
+      "description": "Agreed price for a specific part number for a client",
+      "type": "object",
+      "properties": {
+        "partNumber": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["partNumber", "price"]
     }
   },
   "firestore": {
@@ -33,6 +55,14 @@
     "login_attempts/{attemptId}": {
       "schema": "LoginAttempt",
       "description": "Historical log of login activity"
+    },
+    "clients/{clientId}": {
+      "schema": "Client",
+      "description": "Automotive clients/partners"
+    },
+    "clients/{clientId}/prices/{priceId}": {
+      "schema": "ClientPrice",
+      "description": "Standardized part prices for a specific client"
     }
   }
 }

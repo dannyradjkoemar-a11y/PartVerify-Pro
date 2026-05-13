@@ -82,10 +82,6 @@ export default function App() {
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [clients, setClients] = useState<any[]>([]);
-  const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [clientPrices, setClientPrices] = useState<Record<string, number>>({});
-
   const [tfaSecret, setTfaSecret] = useState<string | null>(null);
   const [isTfaEnabled, setIsTfaEnabled] = useState<boolean>(false);
 
@@ -185,44 +181,6 @@ export default function App() {
       setLoading(false);
     });
   }, []);
-
-  // Fetch clients
-  useEffect(() => {
-    if (isAuthorized) {
-      const loadClients = async () => {
-        try {
-          const q = query(collection(db, "clients"));
-          const snapshot = await getDocs(q);
-          setClients(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-        } catch (err) {
-          handleFirestoreError(err, 'get', 'clients');
-        }
-      };
-      loadClients();
-    }
-  }, [isAuthorized]);
-
-  // Fetch prices for selected client
-  useEffect(() => {
-    if (selectedClientId) {
-      const loadPrices = async () => {
-        try {
-          const snapshot = await getDocs(collection(db, "clients", selectedClientId, "prices"));
-          const prices: Record<string, number> = {};
-          snapshot.docs.forEach(d => {
-            const data = d.data();
-            prices[normalizePartNumber(data.partNumber)] = data.price;
-          });
-          setClientPrices(prices);
-        } catch (err) {
-          handleFirestoreError(err, 'get', `clients/${selectedClientId}/prices`);
-        }
-      };
-      loadPrices();
-    } else {
-      setClientPrices({});
-    }
-  }, [selectedClientId]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -381,9 +339,6 @@ export default function App() {
       const overrideKey = `${calcPart.id}-${calcPart.partNumber}`;
       const manualPrice = manualOverrides[overrideKey];
 
-      const clientPrice = clientPrices[normalizedCalc];
-      const matchesClientPrice = clientPrice !== undefined && Math.abs(clientPrice - calcPart.price) < 0.005;
-
       const priceDiff = manualPrice !== undefined 
         ? manualPrice - calcPart.price 
         : (finalMatch ? finalMatch.price - calcPart.price : 0);
@@ -395,9 +350,6 @@ export default function App() {
       
       if (removedPartIds.has(calcPart.id)) {
         status = 'removed';
-      } else if (matchesClientPrice) {
-        // Automatically match if it hits the client's price list
-        status = 'matched';
       } else if (manualPrice !== undefined) {
         // If manual price equals calculation price, it's effectively "OK"
         const manualDiff = manualPrice - calcPart.price;
@@ -819,20 +771,6 @@ export default function App() {
                     value={caseNumber}
                     onChange={(e) => setCaseNumber(e.target.value)}
                   />
-                </div>
-                <div className="w-px h-10 bg-slate-100 mx-2 hidden md:block" />
-                <div className="flex-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Opdrachtgever</label>
-                  <select 
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="w-full bg-transparent text-sm font-bold text-slate-800 focus:outline-none appearance-none cursor-pointer"
-                  >
-                    <option value="">Geen / Standaard</option>
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
                 </div>
               </div>
 
@@ -1340,84 +1278,34 @@ function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDis
 function AdminView({ onBack }: any) {
   const [users, setUsers] = useState<any[]>([]);
   const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [attempts, setAttempts] = useState<any[]>([]);
-  const [clients, setClients] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'logs'>('clients');
-
-  // Client management state
-  const [newClientName, setNewClientName] = useState("");
-  const [selectedAdminClient, setSelectedAdminClient] = useState<string | null>(null);
-  const [clientPrices, setClientPrices] = useState<any[]>([]);
-  const [newPartNumber, setNewPartNumber] = useState("");
-  const [newPartDescription, setNewPartDescription] = useState("");
-  const [newPartPrice, setNewPartPrice] = useState("");
-
-  const loadData = async () => {
-    const uDocs = await getDocs(collection(db, "users"));
-    setUsers(uDocs.docs.map(d => ({ id: d.id, ...d.data() })));
-
-    const aDocs = await getDocs(query(collection(db, "login_attempts")));
-    setAttempts(aDocs.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
-
-    const cDocs = await getDocs(collection(db, "clients"));
-    setClients(cDocs.docs.map(d => ({ id: d.id, ...d.data() })));
-  };
 
   useEffect(() => {
+    const loadData = async () => {
+      const uDocs = await getDocs(collection(db, "users"));
+      setUsers(uDocs.docs.map(d => ({ id: d.id, ...d.data() })));
+
+      const aDocs = await getDocs(query(collection(db, "login_attempts")));
+      setAttempts(aDocs.docs.map(d => d.data()).sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+    };
     loadData();
   }, []);
 
-  useEffect(() => {
-    if (selectedAdminClient) {
-      const loadPrices = async () => {
-        const pDocs = await getDocs(collection(db, "clients", selectedAdminClient, "prices"));
-        setClientPrices(pDocs.docs.map(d => ({ id: d.id, ...d.data() })));
-      };
-      loadPrices();
-    }
-  }, [selectedAdminClient]);
-
   const createUser = async () => {
-    alert("Om beveiligingsredenen moet u de gebruiker eerst aanmaken in de Firebase Console.\nZodra aangemaakt, voeg ik hier de rol toe aan Firestore.");
+    // Note: Creating actual Firebase Auth users requires Admin SDK or custom logic
+    // For this simple demo, I'll alert that real user creation happens in Firebase Console
+    // but I'll add the profile to Firestore.
+    alert("Om beveiligingsredenen moet u de gebruiker eerst aanmaken in de Firebase Console (Authentication tab).\nZodra aangemaakt, voeg ik hier de rol toe aan Firestore.");
+    
+    // In a real app, this would be a cloud function
+    // But I'll simulate by adding the email to the users list
     await addDoc(collection(db, "users"), {
       email: newEmail,
       role: "user",
       createdAt: serverTimestamp()
     });
     setNewEmail("");
-    loadData();
-  };
-
-  const createClient = async () => {
-    if (!newClientName.trim()) return;
-    await addDoc(collection(db, "clients"), {
-      name: newClientName,
-      createdAt: serverTimestamp()
-    });
-    setNewClientName("");
-    loadData();
-  };
-
-  const addPrice = async () => {
-    if (!selectedAdminClient || !newPartNumber || !newPartPrice) return;
-    await addDoc(collection(db, "clients", selectedAdminClient, "prices"), {
-      partNumber: newPartNumber,
-      description: newPartDescription,
-      price: parseFloat(newPartPrice.replace(',', '.')),
-      updatedAt: serverTimestamp()
-    });
-    setNewPartNumber("");
-    setNewPartDescription("");
-    setNewPartPrice("");
-    // Reload prices
-    const pDocs = await getDocs(collection(db, "clients", selectedAdminClient, "prices"));
-    setClientPrices(pDocs.docs.map(d => ({ id: d.id, ...d.data() })));
-  };
-
-  const deletePrice = async (priceId: string) => {
-    if (!selectedAdminClient) return;
-    await deleteDoc(doc(db, "clients", selectedAdminClient, "prices", priceId));
-    setClientPrices(prev => prev.filter(p => p.id !== priceId));
   };
 
   return (
@@ -1427,222 +1315,78 @@ function AdminView({ onBack }: any) {
       className="max-w-6xl mx-auto space-y-8"
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold tracking-tight text-amber-600">Beheerderspaneel</h2>
-          <div className="flex bg-slate-100 p-1 rounded-xl">
-            <button 
-              onClick={() => setActiveTab('clients')}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'clients' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Opdrachtgevers
-            </button>
-            <button 
-              onClick={() => setActiveTab('users')}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'users' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Gebruikers
-            </button>
-            <button 
-              onClick={() => setActiveTab('logs')}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'logs' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-            >
-              Logs
-            </button>
-          </div>
-        </div>
+        <h2 className="text-2xl font-bold tracking-tight text-amber-600">Beheerderspaneel</h2>
         <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-medium text-sm">Terug naar Dashboard</button>
       </div>
 
-      {activeTab === 'clients' ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Client List */}
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Nieuwe Opdrachtgever</h3>
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder="Naam (bv. Allianz)" 
-                  value={newClientName}
-                  onChange={(e) => setNewClientName(e.target.value)}
-                  className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
-                />
-                <button 
-                  onClick={createClient}
-                  className="p-3 bg-amber-600 text-white rounded-xl hover:bg-amber-500"
-                >
-                  <Plus size={20} />
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Opdrachtgevers</h3>
-              <div className="space-y-2">
-                {clients.map(c => (
-                  <button 
-                    key={c.id}
-                    onClick={() => setSelectedAdminClient(c.id)}
-                    className={`w-full p-4 text-left rounded-2xl border transition-all ${selectedAdminClient === c.id ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}
-                  >
-                    <div className="font-bold text-slate-800">{c.name}</div>
-                    <div className="text-[10px] text-slate-400 uppercase tracking-tight mt-1">
-                      {c.id}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Price Management */}
-          <div className="lg:col-span-2">
-            {selectedAdminClient ? (
-              <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-8">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-bold">Prijslijst: {clients.find(c => c.id === selectedAdminClient)?.name}</h3>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Partnummer</label>
-                    <input 
-                      type="text" 
-                      value={newPartNumber}
-                      onChange={(e) => setNewPartNumber(e.target.value)}
-                      placeholder="bv. 12345"
-                      className="w-full p-2 text-sm border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Omschrijving</label>
-                    <input 
-                      type="text" 
-                      value={newPartDescription}
-                      onChange={(e) => setNewPartDescription(e.target.value)}
-                      placeholder="bv. Kentekenplaat"
-                      className="w-full p-2 text-sm border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                  <div className="md:col-span-1">
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Standaard Prijs</label>
-                    <input 
-                      type="text" 
-                      value={newPartPrice}
-                      onChange={(e) => setNewPartPrice(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full p-2 text-sm border border-slate-200 rounded-lg"
-                    />
-                  </div>
-                  <div className="md:col-span-1 flex items-end">
-                    <button 
-                      onClick={addPrice}
-                      className="w-full py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800"
-                    >
-                      Toevoegen
-                    </button>
-                  </div>
-                </div>
-
-                <div className="divide-y divide-slate-100">
-                  {clientPrices.length > 0 ? (
-                    clientPrices.map(p => (
-                      <div key={p.id} className="py-4 flex items-center justify-between group">
-                        <div className="flex items-center gap-8">
-                          <code className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded w-32">{p.partNumber}</code>
-                          <div className="w-48 text-sm font-medium text-slate-700">{p.description}</div>
-                          <div className="text-sm font-black text-slate-900">€ {p.price.toFixed(2)}</div>
-                        </div>
-                        <button 
-                          onClick={() => deletePrice(p.id)}
-                          className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="py-20 text-center text-slate-300 italic text-sm">Geen onderdelen gedefinieerd voor deze opdrachtgever.</div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="h-full flex items-center justify-center p-20 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-medium">
-                Selecteer een opdrachtgever om de prijslijst te beheren
-              </div>
-            )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
+          <h3 className="text-lg font-bold">Nieuwe Gebruiker Registreren</h3>
+          <div className="space-y-4">
+            <input 
+              type="email" 
+              placeholder="Emailadres" 
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl"
+            />
+            <button 
+              onClick={createUser}
+              className="w-full bg-amber-600 text-white py-4 rounded-xl font-bold hover:bg-amber-500 transition-all"
+            >
+              Gebruiker Toevoegen
+            </button>
           </div>
         </div>
-      ) : activeTab === 'users' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
-            <h3 className="text-lg font-bold">Nieuwe Gebruiker Registreren</h3>
-            <div className="space-y-4">
-              <input 
-                type="email" 
-                placeholder="Emailadres" 
-                value={newEmail}
-                onChange={(e) => setNewEmail(e.target.value)}
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl shadow-inner shadow-slate-100"
-              />
-              <button 
-                onClick={createUser}
-                className="w-full bg-amber-600 text-white py-4 rounded-xl font-bold hover:bg-amber-500 transition-all shadow-lg shadow-amber-100"
-              >
-                Gebruiker Toevoegen
-              </button>
-            </div>
-          </div>
 
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
-            <h3 className="text-lg font-bold">Actieve Gebruikers</h3>
-            <div className="space-y-3">
-              {users.map(u => (
-                <div key={u.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <div>
-                    <div className="font-bold text-sm">{u.email}</div>
-                    <div className="text-[10px] text-slate-400 uppercase tracking-widest">{u.role}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {u.tfaEnabled && <ShieldCheck size={14} className="text-emerald-500" />}
-                    <button className="text-rose-500 p-1 hover:bg-rose-50 rounded"><XCircle size={16} /></button>
-                  </div>
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
+          <h3 className="text-lg font-bold">Actieve Gebruikers</h3>
+          <div className="space-y-3">
+            {users.map(u => (
+              <div key={u.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div>
+                  <div className="font-bold text-sm">{u.email}</div>
+                  <div className="text-[10px] text-slate-400 uppercase tracking-widest">{u.role}</div>
                 </div>
-              ))}
-            </div>
+                <div className="flex items-center gap-2">
+                  {u.tfaEnabled && <ShieldCheck size={14} className="text-emerald-500" />}
+                  <button className="text-rose-500 p-1 hover:bg-rose-50 rounded"><XCircle size={16} /></button>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
-      ) : (
-        <div className="bg-white rounded-3xl border border-slate-200 p-8">
-          <h3 className="text-lg font-bold mb-6 text-slate-800">Recente Inlogpogingen</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
-                  <th className="py-4 px-2">Datum/Tijd</th>
-                  <th className="py-4 px-2">Email</th>
-                  <th className="py-4 px-2">Status</th>
-                  <th className="py-4 px-2">Locatie/Browser</th>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200 p-8">
+        <h3 className="text-lg font-bold mb-6">Recente Inlogpogingen</h3>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-slate-400 uppercase tracking-widest font-black border-b border-slate-100">
+                <th className="py-4">Datum/Tijd</th>
+                <th className="py-4">Email</th>
+                <th className="py-4">Status</th>
+                <th className="py-4">Locatie/Browser</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {attempts.map((a, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-all">
+                  <td className="py-4">{a.timestamp?.toDate().toLocaleString('nl-NL')}</td>
+                  <td className="py-4 font-bold">{a.email}</td>
+                  <td className="py-4">
+                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${a.status === 'attempted' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
+                      {a.status}
+                    </span>
+                  </td>
+                  <td className="py-4 text-slate-400 max-w-xs truncate">{a.userAgent}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {attempts.map((a, i) => (
-                  <tr key={i} className="hover:bg-slate-50 transition-all">
-                    <td className="py-4 px-2">{a.timestamp?.toDate().toLocaleString('nl-NL')}</td>
-                    <td className="py-4 px-2 font-bold">{a.email}</td>
-                    <td className="py-4 px-2">
-                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${a.status === 'attempted' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700'}`}>
-                        {a.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-2 text-slate-400 max-w-xs truncate">{a.userAgent}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
     </motion.div>
   );
 }
