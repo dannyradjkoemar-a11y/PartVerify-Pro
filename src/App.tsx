@@ -1024,6 +1024,7 @@ export default function App() {
                 <table className="w-full text-left text-sm border-collapse">
                   <thead>
                     <tr className="bg-slate-50/50 text-slate-500 font-bold uppercase tracking-widest text-[10px]">
+                      <th className="px-4 py-4 w-10"></th>
                       <th className="px-6 py-4">Status</th>
                       <th className="px-6 py-4 text-center">Pos.</th>
                       <th className="px-6 py-4">Onderdeel (Calculatie)</th>
@@ -1045,6 +1046,17 @@ export default function App() {
                             transition={{ delay: i * 0.02 }}
                             className={`group hover:bg-slate-50/80 transition-all ${res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''} ${struckThroughIds.has(res.calc.id) ? 'opacity-40 grayscale bg-slate-50/30' : ''}`}
                           >
+                            <td className="px-4 py-4">
+                              {res.status === 'deviation' && (
+                                <button 
+                                  onClick={() => toggleStrikethrough(res.calc.id)}
+                                  className={`p-2 rounded-lg transition-all ${struckThroughIds.has(res.calc.id) ? 'bg-indigo-100 text-indigo-600' : 'text-slate-300 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                                  title={struckThroughIds.has(res.calc.id) ? "Standaard weergave" : "Doorstrepen"}
+                                >
+                                  <CheckSquare size={16} />
+                                </button>
+                              )}
+                            </td>
                             <td className="px-6 py-4 text-xs font-bold uppercase tracking-tight">
                               {res.status === 'matched' ? (
                                 <div className="flex items-center gap-2 text-emerald-600">
@@ -1189,15 +1201,6 @@ export default function App() {
                               )}
                             </td>
                             <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
-                              {(res.status === 'approved' || res.status === 'matched') && (
-                                <button 
-                                  onClick={() => toggleStrikethrough(res.calc.id)}
-                                  className={`p-2 rounded-lg transition-all ${struckThroughIds.has(res.calc.id) ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
-                                  title={struckThroughIds.has(res.calc.id) ? "Standaard weergave" : "Doorstrepen"}
-                                >
-                                  <CheckSquare size={18} />
-                                </button>
-                              )}
                               <button 
                                 onClick={() => {
                                   if (res.calc.id.startsWith('MAN-')) {
@@ -1216,7 +1219,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={8} className="px-6 py-20 text-center">
+                          <td colSpan={9} className="px-6 py-20 text-center">
                             <div className="flex flex-col items-center gap-3">
                               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
                                 <Search size={32} />
