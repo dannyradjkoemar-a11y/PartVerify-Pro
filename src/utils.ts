@@ -106,6 +106,7 @@ export const parseCurrency = (val: string): number => {
 export const parseCalculation = (text: string): AutomotivePart[] => {
   const lines = text.split('\n');
   const parts: AutomotivePart[] = [];
+  const seenIds = new Map<string, number>();
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -118,8 +119,13 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
     const match = trimmed.match(/^(\d{4})\s+(.+?)\s{2,}([*A-Z0-9\s/.-]{2,})\s{2,}([\d\.,\s]+)$/);
     
     if (match) {
+      const baseId = match[1];
+      const count = seenIds.get(baseId) || 0;
+      const id = count === 0 ? baseId : `${baseId}-${count}`;
+      seenIds.set(baseId, count + 1);
+
       parts.push({
-        id: `${match[1]}-${parts.length}`,
+        id: id,
         description: match[2].trim(),
         partNumber: match[3].trim(),
         price: parseCurrency(match[4]),
@@ -132,8 +138,13 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
       if (parts_list.length >= 3) {
         const price = parseCurrency(parts_list[parts_list.length - 1]);
         if (price > 0) {
+          const baseId = parts_list[0];
+          const count = seenIds.get(baseId) || 0;
+          const id = count === 0 ? baseId : `${baseId}-${count}`;
+          seenIds.set(baseId, count + 1);
+
           parts.push({
-            id: `${parts_list[0]}-${parts.length}`,
+            id: id,
             description: parts_list[1],
             partNumber: parts_list[parts_list.length - 2],
             price: price,

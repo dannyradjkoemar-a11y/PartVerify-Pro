@@ -1047,7 +1047,7 @@ export default function App() {
                             className={`group hover:bg-slate-50/80 transition-all ${res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''} ${struckThroughIds.has(res.calc.id) ? 'opacity-40 grayscale bg-slate-50/30' : ''}`}
                           >
                             <td className="px-4 py-4">
-                              {res.status === 'deviation' && (
+                              {(res.status === 'removed' || res.status === 'approved') && (
                                 <button 
                                   onClick={() => toggleStrikethrough(res.calc.id)}
                                   className={`p-2 rounded-lg transition-all ${struckThroughIds.has(res.calc.id) ? 'bg-indigo-100 text-indigo-600' : 'text-slate-300 hover:text-indigo-600 hover:bg-indigo-50'}`}
