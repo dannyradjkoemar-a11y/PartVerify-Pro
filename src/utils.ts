@@ -119,7 +119,7 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
     
     if (match) {
       parts.push({
-        id: match[1],
+        id: `${match[1]}-${parts.length}`,
         description: match[2].trim(),
         partNumber: match[3].trim(),
         price: parseCurrency(match[4]),
@@ -133,7 +133,7 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
         const price = parseCurrency(parts_list[parts_list.length - 1]);
         if (price > 0) {
           parts.push({
-            id: parts_list[0],
+            id: `${parts_list[0]}-${parts.length}`,
             description: parts_list[1],
             partNumber: parts_list[parts_list.length - 2],
             price: price,

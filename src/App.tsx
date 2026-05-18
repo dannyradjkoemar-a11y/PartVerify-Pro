@@ -1153,11 +1153,11 @@ export default function App() {
                                     className="w-28 p-2 border-2 border-blue-400 rounded-lg text-base font-black text-blue-700 focus:outline-none shadow-sm"
                                   />
                                 </div>
-                              ) : res.status === 'approved' ? (
+                              ) : res.manualPrice !== undefined ? (
                                 <div className="flex items-center justify-between group/price cursor-pointer" onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}>
-                                  <div className="text-amber-600 font-extrabold text-base">
+                                  <div className="text-emerald-600 font-extrabold text-base">
                                     € {res.manualPrice?.toFixed(2)}
-                                    <span className="ml-2 text-[9px] bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Gewijzigd</span>
+                                    <span className="ml-2 text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Aangepast</span>
                                   </div>
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); removeOverride(res.calc.id, res.calc.partNumber); }}
