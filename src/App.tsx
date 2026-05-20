@@ -24,7 +24,12 @@ import {
   Trash2,
   Plus,
   CarFront,
-  CheckSquare
+  CheckSquare,
+  X,
+  Calendar,
+  DollarSign,
+  Activity,
+  Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -101,6 +106,7 @@ export default function App() {
   const [vehicleData, setVehicleData] = useState<any>(null);
   const [vehicleLoading, setVehicleLoading] = useState<boolean>(false);
   const [vehicleError, setVehicleError] = useState<string | null>(null);
+  const [showRdwModal, setShowRdwModal] = useState<boolean>(false);
   const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
@@ -261,6 +267,52 @@ export default function App() {
   const capitalizeWords = (str?: string) => {
     if (!str) return "Onbekend";
     return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  const calculateEstimatedDagwaarde = (catalogusprijs?: string, datumToelating?: string) => {
+    if (!catalogusprijs) return null;
+    const originalPrice = parseFloat(catalogusprijs);
+    if (isNaN(originalPrice) || originalPrice <= 0) return null;
+
+    let years = 0;
+    if (datumToelating && datumToelating.length === 8) {
+      const year = parseInt(datumToelating.substring(0, 4));
+      const month = parseInt(datumToelating.substring(4, 6)) - 1;
+      const day = parseInt(datumToelating.substring(6, 8));
+      const admissionDate = new Date(year, month, day);
+      const today = new Date();
+      const diffTime = Math.abs(today.getTime() - admissionDate.getTime());
+      years = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    }
+
+    if (years <= 0) return originalPrice;
+
+    // Advanced car depreciation curve (Nederlandse Richtlijnen)
+    // Year 1: approx -22%
+    // Year 2-3: approx -14% annually
+    // Year 4-6: approx -11% annually
+    // Year 7+: approx -8% annually
+    let factor = 1.0;
+    for (let i = 0; i < Math.floor(years); i++) {
+      if (i === 0) {
+        factor *= 0.78; // 1st year 22% depreciation
+      } else if (i < 3) {
+        factor *= 0.86; // Years 2-3: 14% annual depreciation
+      } else if (i < 6) {
+        factor *= 0.89; // Years 4-6: 11% annual depreciation
+      } else {
+        factor *= 0.92; // Years 7+: 8% annual depreciation
+      }
+    }
+    // Handle remaining fractional year
+    const remainingFraction = years - Math.floor(years);
+    const dropRate = Math.floor(years) === 0 ? 0.22 : Math.floor(years) < 3 ? 0.14 : Math.floor(years) < 6 ? 0.11 : 0.08;
+    factor *= (1 - (dropRate * remainingFraction));
+
+    // A car's residual value floor is usually around 8% of original value, minimum of €750
+    const floorValue = originalPrice * 0.08;
+    const finalValue = Math.max(originalPrice * factor, floorValue, 750);
+    return finalValue;
   };
 
   // Fetch prices for selected client
@@ -914,16 +966,48 @@ export default function App() {
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
               <div className="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Kenteken</label>
-                  <div className="flex items-center gap-2">
-                    <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-                    <input 
-                      type="text"
-                      placeholder="Kenteken (bv. AB-123-C)"
-                      className="w-full bg-transparent text-lg font-black text-slate-800 uppercase focus:outline-none placeholder:text-slate-200"
-                      value={licensePlate}
-                      onChange={(e) => setLicensePlate(e.target.value)}
-                    />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
+                  <div className="flex items-center justify-between gap-3">
+                    {/* Dutch styled license plate input */}
+                    <div className="relative flex items-center bg-[#FFD600] text-slate-950 font-mono font-black border-2 border-slate-950 rounded-xl overflow-hidden shadow-md h-12 flex-1 max-w-[220px] transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
+                      {/* EU/NL banner */}
+                      <div className="bg-[#0039AE] text-white text-[7px] px-2 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r border-slate-950/20">
+                        <span className="text-[8px] text-[#FFD600] font-sans leading-none mb-1">★★</span>
+                        <span className="text-[9px] font-sans font-black tracking-tighter leading-none">NL</span>
+                      </div>
+                      
+                      {/* Input */}
+                      <input 
+                        type="text"
+                        placeholder="AB-123-C"
+                        maxLength={11}
+                        className="w-full bg-transparent text-center text-base font-black font-mono placeholder:text-slate-950/25 text-slate-950 focus:outline-none uppercase tracking-widest px-2"
+                        value={licensePlate}
+                        onChange={(e) => setLicensePlate(e.target.value)}
+                      />
+                    </div>
+                    {licensePlate.replace(/[^a-zA-Z0-9]/g, '').length >= 6 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (vehicleData) {
+                            setShowRdwModal(true);
+                          }
+                        }}
+                        disabled={vehicleLoading}
+                        className={`px-3 py-1.5 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                          vehicleData 
+                            ? 'bg-yellow-300 text-slate-950 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
+                            : vehicleLoading 
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50' 
+                            : 'bg-blue-50 text-blue-600 border border-blue-105 hover:bg-blue-100 hover:text-blue-700'
+                        }`}
+                        title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
+                      >
+                        <CarFront size={13} className={vehicleLoading ? "animate-spin text-blue-550" : "text-current"} />
+                        <span>{vehicleLoading ? 'Laden...' : 'RDW'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
                 <div className="w-px h-10 bg-slate-100 mx-2 hidden md:block" />
@@ -972,86 +1056,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* RDW Voertuiggegevens */}
-            <AnimatePresence mode="wait">
-              {vehicleLoading ? (
-                <motion.div 
-                  key="loading"
-                  initial={{ opacity: 0, height: 0, y: -10 }}
-                  animate={{ opacity: 1, height: "auto", y: 0 }}
-                  exit={{ opacity: 0, height: 0, y: -10 }}
-                  className="bg-slate-50 border border-slate-200 p-4 rounded-3xl flex items-center justify-center gap-3 shadow-inner"
-                >
-                  <RefreshCw size={18} className="animate-spin text-blue-600" />
-                  <span className="text-sm font-bold text-slate-500">RDW voertuiggegevens ophalen...</span>
-                </motion.div>
-              ) : vehicleData ? (
-                <motion.div 
-                  key="data"
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="bg-gradient-to-br from-indigo-50/70 to-blue-50/40 border border-blue-250 p-5 rounded-3xl shadow-sm flex flex-col md:flex-row gap-6 items-center md:items-stretch group"
-                >
-                  {/* Left license plate element */}
-                  <div className="bg-blue-600 text-white px-5 py-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 w-full md:w-44 shrink-0 shadow-md shadow-blue-500/10 hover:shadow-lg transition-all relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12 -translate-y-12 pointer-events-none" />
-                    <CarFront size={32} className="text-blue-100 animate-pulse" />
-                    <span className="text-[9px] uppercase font-black tracking-widest text-blue-200">R.D.W. INFO</span>
-                    <div className="mt-1 font-mono font-black border border-white/30 bg-white/20 px-3 py-1 rounded-lg text-sm tracking-wider shadow-inner uppercase">
-                      {licensePlate.toUpperCase()}
-                    </div>
-                  </div>
-                  
-                  {/* Grid of specifications */}
-                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 w-full">
-                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
-                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Merk</span>
-                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5">{capitalizeWords(vehicleData.merk)}</span>
-                    </div>
-                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
-                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Model</span>
-                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5 max-w-full truncate" title={vehicleData.handelsbenaming}>
-                        {capitalizeWords(vehicleData.handelsbenaming)}
-                      </span>
-                    </div>
-                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
-                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Kleur</span>
-                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5">{capitalizeWords(vehicleData.eerste_kleur)}</span>
-                    </div>
-                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
-                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Catalogusprijs</span>
-                      <span className="font-extrabold text-sm text-emerald-600 tracking-tight mt-0.5">{formatCurrency(vehicleData.catalogusprijs)}</span>
-                    </div>
-                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
-                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Datum Toelating</span>
-                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5">{formatDateRDW(vehicleData.datum_eerste_toelating)}</span>
-                    </div>
-                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
-                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">APK Vervaldatum</span>
-                      <span className={`font-extrabold text-sm tracking-tight mt-0.5 ${
-                        vehicleData.vervaldatum_apk && parseInt(vehicleData.vervaldatum_apk) < parseInt(new Date().toISOString().slice(0, 10).replace(/[^0-9]/g, ''))
-                          ? 'text-rose-600'
-                          : 'text-blue-600'
-                      }`}>
-                        {formatDateRDW(vehicleData.vervaldatum_apk)}
-                      </span>
-                    </div>
-                  </div>
-                </motion.div>
-              ) : vehicleError && licensePlate.replace(/[^a-zA-Z0-9]/g, '').length >= 6 ? (
-                <motion.div 
-                  key="error"
-                  initial={{ opacity: 0, y: -15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -15 }}
-                  className="bg-amber-50/70 border border-amber-200 p-4 rounded-3xl flex items-center gap-3 shadow-sm"
-                >
-                  <AlertCircle size={18} className="text-amber-600 animate-pulse" />
-                  <span className="text-xs font-bold text-amber-700">Geen voertuiggegevens gevonden voor {licensePlate.toUpperCase()} (RDW Open Data)</span>
-                </motion.div>
-              ) : null}
-            </AnimatePresence>
+
 
             {/* Main Stats: Financials vs Breakdown */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1547,6 +1552,222 @@ export default function App() {
             onBack={() => setView('dashboard')}
           />
         )}
+
+        {/* RDW Voertuiggegevens Uitgebreide Modal */}
+        <AnimatePresence>
+          {showRdwModal && vehicleData && (
+            <div className="fixed inset-0 z-50 overflow-y-auto">
+              {/* Backdrop slide/fade */}
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowRdwModal(false)}
+                className="fixed inset-0 bg-slate-950/60 backdrop-blur-md"
+              />
+              
+              {/* Modal Box */}
+              <div className="flex min-h-screen items-center justify-center p-4">
+                <motion.div 
+                  initial={{ scale: 0.95, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.95, opacity: 0, y: 20 }}
+                  transition={{ type: "spring", duration: 0.5 }}
+                  className="relative bg-white text-slate-900 rounded-[2.5rem] w-full max-w-4xl overflow-hidden shadow-2xl border border-slate-100 z-10 flex flex-col max-h-[90vh]"
+                >
+                  {/* Header: Brand Banner with RDW look & feel */}
+                  <div className="bg-gradient-to-r from-slate-900 to-slate-850 p-6 text-white flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-850">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-yellow-400 rounded-2xl flex items-center justify-center text-slate-950 shadow-md transform rotate-3 shrink-0">
+                        <CarFront size={24} />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                          <span>RDW Voertuigrapport</span>
+                          <span className="px-2 py-0.5 bg-yellow-400 text-slate-950 rounded-md font-black text-[9px] uppercase tracking-widest leading-none">OFFICIEEL</span>
+                        </h3>
+                        <p className="text-slate-400 text-xs mt-0.5 font-medium">Uitgebreide voertuigspecificaties uit de RDW Open Data database</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                      {/* Centered stylized license plate */}
+                      <div className="bg-[#FFD600] text-black font-mono font-black border-2 border-slate-950 px-4 py-1.5 rounded-xl flex items-center gap-3 tracking-wider text-base shadow-inner h-11 select-none">
+                        <div className="bg-[#0039AE] text-white text-[9px] px-1 py-0.5 rounded-md flex flex-col items-center justify-center leading-none font-sans h-5 self-center">
+                          <span className="text-[7px] font-black tracking-tighter">NL</span>
+                        </div>
+                        <span className="text-sm tracking-[0.05em]">{licensePlate.toUpperCase().replace(/[^a-zA-Z0-9]/g, '').replace(/(.{2})(.{2})(.{2})/, '$1-$2-$3')}</span>
+                      </div>
+
+                      <button 
+                        onClick={() => setShowRdwModal(false)}
+                        className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-full transition-colors"
+                        title="Sluiten"
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="flex-1 overflow-y-auto p-8 space-y-6">
+                    {/* General Vehicle Info Card */}
+                    <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/20 p-6 rounded-3xl border border-blue-100/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 text-left">
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-black uppercase text-blue-500 tracking-widest bg-blue-100/50 px-2.5 py-1 rounded-full border border-blue-100">Merk & Model</span>
+                        <h4 className="text-2xl font-black text-slate-900 mt-2">
+                          {capitalizeWords(vehicleData.merk)} {capitalizeWords(vehicleData.handelsbenaming)}
+                        </h4>
+                        <p className="text-sm text-slate-500 font-medium">{capitalizeWords(vehicleData.inrichting) || "Niet gespecificeerd"} ({vehicleData.voertuigsoort})</p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {/* Insured Status Pill */}
+                        <div className="px-4 py-2 bg-white rounded-2xl border border-slate-200/60 shadow-sm flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${vehicleData.wam_verzekerd === 'Ja' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500 animate-pulse'}`} />
+                          <span className="text-xs font-bold text-slate-600">
+                            Verzekerd: <span className={vehicleData.wam_verzekerd === 'Ja' ? 'text-emerald-600 font-black' : 'text-rose-600 font-black'}>{vehicleData.wam_verzekerd || 'Onbekend'}</span>
+                          </span>
+                        </div>
+                        
+                        {/* APK Expiration Pill */}
+                        <div className="px-4 py-2 bg-white rounded-2xl border border-slate-200/60 shadow-sm flex items-center gap-2">
+                          <Calendar size={14} className="text-blue-500" />
+                          <span className="text-xs font-bold text-slate-600">
+                            APK tot: <span className="text-slate-900 font-black">{formatDateRDW(vehicleData.vervaldatum_apk)}</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Highly prominent 'Geschatte Dagwaarde' banner */}
+                    {calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating) && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-gradient-to-r from-emerald-600 to-teal-600 rounded-[2rem] p-6 text-white flex flex-col sm:flex-row justify-between items-center gap-4 shadow-lg shadow-emerald-500/10 relative overflow-hidden group"
+                      >
+                        <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full translate-x-12 -translate-y-12 pointer-events-none group-hover:scale-110 transition-transform duration-550" />
+                        <div className="flex items-center gap-4 text-left relative z-10">
+                          <div className="w-14 h-14 bg-white/10 rounded-2xl flex items-center justify-center text-white shadow-inner select-none">
+                            <DollarSign size={28} className="text-emerald-300" />
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-100 bg-emerald-500/40 border border-emerald-400/30 px-2.5 py-0.5 rounded-full">Calculatie Hulp</span>
+                            <h4 className="text-base font-black text-white mt-1">Geschatte Actuele Dagwaarde</h4>
+                          </div>
+                        </div>
+                        <div className="text-right relative z-10">
+                          <span className="text-3xl md:text-4xl font-black tracking-tight text-white drop-shadow-sm select-all">
+                            {formatCurrency(calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating)?.toString())}
+                          </span>
+                          <p className="text-[9px] text-emerald-100 font-bold mt-1 uppercase tracking-wider opacity-90">Berekend op basis van degressieve afschrijving & leeftijd</p>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Grid of details categorized */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                      {/* Panel 1: Basis & Registratiegegevens */}
+                      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 space-y-4">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-3">
+                          <Calendar size={14} className="text-blue-600" />
+                          <span>Registratie & Historie</span>
+                        </h4>
+                        <div className="space-y-2.5">
+                          <DetailRow label="Datum eerste toelating" value={formatDateRDW(vehicleData.datum_eerste_toelating)} />
+                          <DetailRow label="Datum eerste afgifte NL" value={formatDateRDW(vehicleData.datum_eerste_afgifte_nederland)} />
+                          <DetailRow label="Datum laatste tenaamstelling" value={formatDateRDW(vehicleData.datum_tenaamstelling)} />
+                          <DetailRow label="Vervaldatum APK" value={formatDateRDW(vehicleData.vervaldatum_apk)} valueColor={
+                            vehicleData.vervaldatum_apk && parseInt(vehicleData.vervaldatum_apk) < parseInt(new Date().toISOString().slice(0, 10).replace(/[^0-9]/g, ''))
+                              ? 'text-rose-600 font-black'
+                              : 'text-blue-600 font-black'
+                          } />
+                          <DetailRow label="Kleur" value={capitalizeWords(vehicleData.eerste_kleur)} />
+                          <DetailRow label="Tweede kleur" value={capitalizeWords(vehicleData.tweede_kleur) === "Niet Geregistreerd" ? "Geen" : capitalizeWords(vehicleData.tweede_kleur)} />
+                        </div>
+                      </div>
+
+                      {/* Panel 2: Technische Specificaties */}
+                      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 space-y-4">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-3">
+                          <Activity size={14} className="text-blue-600" />
+                          <span>Techniek & Motor</span>
+                        </h4>
+                        <div className="space-y-2.5">
+                          <DetailRow label="Cilinderinhoud" value={vehicleData.cilinderinhoud ? `${vehicleData.cilinderinhoud} cc` : "Onbekend"} />
+                          <DetailRow label="Aantal cilinders" value={vehicleData.aantal_cilinders || "Onbekend"} />
+                          <DetailRow label="Aantal zitplaatsen" value={vehicleData.aantal_zitplaatsen || "Onbekend"} />
+                          <DetailRow label="Aantal deuren" value={vehicleData.aantal_deuren || "Onbekend"} />
+                          <DetailRow label="Aantal wielen" value={vehicleData.aantal_wielen || "Onbekend"} />
+                          <DetailRow label="Inrichting" value={capitalizeWords(vehicleData.inrichting)} />
+                        </div>
+                      </div>
+
+                      {/* Panel 3: Financiële Informatie */}
+                      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 space-y-4">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-3">
+                          <DollarSign size={14} className="text-blue-600" />
+                          <span>Financieel & Belasting</span>
+                        </h4>
+                        <div className="space-y-2.5">
+                          <DetailRow label="Catalogusprijs" value={formatCurrency(vehicleData.catalogusprijs)} valueColor="text-emerald-600 font-black" />
+                          <DetailRow label="Bruto BPM" value={formatCurrency(vehicleData.bruto_bpm)} valueColor="text-blue-600 font-black" />
+                          {calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating) && (
+                            <div className="mt-2.5 pt-2.5 border-t border-dashed border-slate-200 bg-slate-100/60 p-2 rounded-xl">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="font-bold text-slate-500 flex items-center gap-1">
+                                  <span>Geschatte Dagwaarde</span>
+                                  <span className="bg-blue-105 text-blue-700 font-black text-[8px] px-1 py-0.5 rounded uppercase" title="Berekend op basis van degressieve afschrijving & leeftijd">INFORMATIEF</span>
+                                </span>
+                                <span className="font-black text-slate-900">
+                                  {formatCurrency(calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating)?.toString())}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                          <DetailRow label="Zuinigheidslabel" value={vehicleData.zuinigheidslabel ? vehicleData.zuinigheidslabel.toUpperCase() : "Niet geregistreerd"} />
+                          <DetailRow label="Taxi indicator" value={vehicleData.taxi_indicator || "Nee"} />
+                          <DetailRow label="Export indicator" value={vehicleData.export_indicator || "Nee"} />
+                        </div>
+                      </div>
+
+                      {/* Panel 4: Gewichten & Limieten */}
+                      <div className="bg-slate-50 border border-slate-100 rounded-3xl p-6 space-y-4">
+                        <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2 border-b border-slate-200 pb-3">
+                          <Info size={14} className="text-blue-600" />
+                          <span>Massa & Trekgewicht</span>
+                        </h4>
+                        <div className="space-y-2.5">
+                          <DetailRow label="Rijklaar gewicht" value={vehicleData.massa_rijklaar ? `${vehicleData.massa_rijklaar} kg` : "Onbekend"} />
+                          <DetailRow label="Ledig gewicht" value={vehicleData.massa_ledig_voertuig ? `${vehicleData.massa_ledig_voertuig} kg` : "Onbekend"} />
+                          <DetailRow label="Toegestane max. massa" value={vehicleData.toegestane_maximum_massa ? `${vehicleData.toegestane_maximum_massa} kg` : "Onbekend"} />
+                          <DetailRow label="Aanhangwagen geremd" value={vehicleData.maximum_massa_trekken_geremd ? `${vehicleData.maximum_massa_trekken_geremd} kg` : "Niet toegestaan"} />
+                          <DetailRow label="Aanhangwagen ongeremd" value={vehicleData.maximum_massa_trekken_ongeremd ? `${vehicleData.maximum_massa_trekken_ongeremd} kg` : "Niet toegestaan"} />
+                          <DetailRow label="Openstaande terugroepactie" value={vehicleData.openstaande_terugroepactie_indicator || "Nee"} valueColor={vehicleData.openstaande_terugroepactie_indicator === "Ja" ? "text-rose-600 font-bold animate-pulse" : "text-slate-800 font-bold"} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer of modal */}
+                  <div className="bg-slate-50 px-8 py-5 flex items-center justify-between border-t border-slate-100 rounded-b-[2.5rem] shrink-0">
+                    <div className="flex items-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+                      <ShieldCheck size={14} className="text-blue-500" />
+                      <span>Danny Radjkoemar Compliance Suite</span>
+                    </div>
+                    <button 
+                      onClick={() => setShowRdwModal(false)}
+                      className="px-6 py-2.5 bg-slate-900 text-white font-bold text-sm rounded-xl hover:bg-slate-800 transition-colors active:scale-95"
+                    >
+                      Sluiten
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            </div>
+          )}
+        </AnimatePresence>
       </main>
 
       <footer className="max-w-7xl mx-auto px-6 py-12 border-t border-slate-200 mt-12 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -2027,6 +2248,15 @@ function InputSection({ title, placeholder, value, onChange, icon, partCount }: 
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, valueColor = "text-slate-800 font-extrabold" }: { label: string, value: any, valueColor?: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-2 border-b border-slate-100 text-xs">
+      <span className="font-semibold text-slate-400">{label}</span>
+      <span className={`${valueColor} text-right break-all`}>{value || "Onbekend"}</span>
     </div>
   );
 }
