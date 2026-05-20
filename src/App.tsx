@@ -1164,8 +1164,28 @@ export default function App() {
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-4 text-xs font-mono text-slate-400 text-center">
-                              {res.calc.id}
+                            <td className="px-6 py-4 text-center">
+                              {res.status === 'deviation' ? (
+                                <span className="inline-flex items-center justify-center font-black text-xs px-2.5 py-1 rounded-lg bg-yellow-300 text-slate-950 border-2 border-yellow-400 shadow-md transform hover:scale-105 transition-all outline outline-1 outline-yellow-400/50 animate-pulse">
+                                  {res.calc.id}
+                                </span>
+                              ) : res.status === 'matched' ? (
+                                <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  {res.calc.id}
+                                </span>
+                              ) : res.status === 'approved' ? (
+                                <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+                                  {res.calc.id}
+                                </span>
+                              ) : res.status === 'removed' ? (
+                                <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 border border-slate-200 line-through font-mono">
+                                  {res.calc.id}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
+                                  {res.calc.id}
+                                </span>
+                              )}
                             </td>
                             <td className="px-6 py-4">
                               {res.calc.id.startsWith('MAN-') ? (
