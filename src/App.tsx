@@ -615,17 +615,53 @@ export default function App() {
         6: { halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 0) {
-          if (data.cell.text[0] === 'OK') data.cell.styles.textColor = [16, 185, 129];
-          else if (data.cell.text[0] === 'GEWIJZIGD') data.cell.styles.textColor = [245, 158, 11];
-          else if (data.cell.text[0] === 'AFWIJKING') data.cell.styles.textColor = [225, 29, 72];
-          else if (data.cell.text[0] === 'ONTBREEKT') data.cell.styles.textColor = [244, 63, 94];
-          else if (data.cell.text[0] === 'VERWIJDERD') data.cell.styles.textColor = [150, 150, 150];
-        }
-        if (data.section === 'body' && data.column.index === 5) {
-            const val = parseFloat(data.cell.text[0].replace('+', ''));
-            if (val > 0) data.cell.styles.textColor = [217, 119, 6];
-            else if (val < 0) data.cell.styles.textColor = [16, 185, 129];
+        const item = visibleInPdf[data.row.index];
+        if (!item) return;
+
+        if (data.section === 'body') {
+          // Soft reddish background for any deviation rows to catch attention
+          if (item.status === 'deviation') {
+            data.cell.styles.fillColor = [254, 242, 242]; // Light red
+          }
+
+          if (data.column.index === 0) {
+            if (item.status === 'matched') data.cell.styles.textColor = [16, 185, 129];
+            else if (item.status === 'approved') data.cell.styles.textColor = [245, 158, 11];
+            else if (item.status === 'deviation') {
+              data.cell.styles.textColor = [225, 29, 72];
+              data.cell.styles.fontStyle = 'bold';
+            }
+            else if (item.status === 'missing') data.cell.styles.textColor = [244, 63, 94];
+            else if (item.status === 'removed') data.cell.styles.textColor = [150, 150, 150];
+          }
+
+          // Pos. column (Index 1) - yellow highlighter highlights for deviation position
+          if (data.column.index === 1 && item.status === 'deviation') {
+            data.cell.styles.fillColor = [253, 224, 71]; // Bright yellow highlighter
+            data.cell.styles.textColor = [15, 23, 42]; // Slate-900 (dark charcoal text)
+            data.cell.styles.fontStyle = 'bold';
+          }
+
+          // Factuur Prijs column (Index 5)
+          if (data.column.index === 5) {
+            if (item.status === 'deviation') {
+              data.cell.styles.fillColor = [209, 250, 229]; // Soft emerald highlighter
+              data.cell.styles.textColor = [16, 185, 129]; // Active green
+              data.cell.styles.fontStyle = 'bold';
+            } else {
+              const val = parseFloat(data.cell.text[0].replace('EUR ', '').replace('+', ''));
+              if (val > 0) data.cell.styles.textColor = [16, 185, 129];
+            }
+          }
+
+          // Price differences (Index 6)
+          if (data.column.index === 6) {
+            if (item.priceDiff > 0) {
+              data.cell.styles.textColor = [225, 29, 72]; // Rose-600 (higher cost)
+            } else if (item.priceDiff < 0) {
+              data.cell.styles.textColor = [16, 185, 129]; // Emerald (saving details)
+            }
+          }
         }
       }
     });
@@ -1212,9 +1248,9 @@ export default function App() {
                                  >
                                    <div className="flex flex-col gap-1">
                                      <div className="flex items-center gap-1.5">
-                                       <span className="text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                                         Pos {res.calc.id}
-                                       </span>
+                                       <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
+                                          {res.calc.id}
+                                        </span>
                                        <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/50 px-1.5 py-0.5 rounded-md uppercase tracking-wider">Aangepast</span>
                                      </div>
                                      <div className="text-emerald-700 font-black text-base">
@@ -1239,13 +1275,9 @@ export default function App() {
                                    }`}
                                  >
                                    <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-                                     <span className={`text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded ${
-                                       res.status === 'matched' 
-                                         ? 'bg-emerald-100 text-emerald-800' 
-                                         : 'bg-rose-100 text-rose-800'
-                                     }`}>
-                                       Pos {res.calc.id}
-                                     </span>
+                                     <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
+                                        {res.calc.id}
+                                      </span>
                                      <span className="text-slate-700 text-xs font-bold truncate max-w-[150px]" title={res.match.description}>
                                        {res.match.description}
                                      </span>
@@ -1257,11 +1289,16 @@ export default function App() {
                                    </div>
                                    
                                    {res.status === 'deviation' ? (
-                                     <div className="mt-1.5 p-2.5 bg-emerald-600 rounded-xl text-white shadow-md border border-emerald-500 flex flex-col gap-0.5">
-                                       <span className="text-[10px] uppercase font-black tracking-widest text-emerald-100 flex items-center gap-1">
-                                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                                         👉 CORRECTE PRIJS:
-                                       </span>
+                                      <div className="mt-1.5 p-2.5 bg-emerald-600 rounded-xl text-white shadow-md border border-emerald-500 flex flex-col gap-1.5">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-[10px] uppercase font-black tracking-widest text-emerald-100 flex items-center gap-1">
+                                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                            👉 CORRECTE PRIJS:
+                                          </span>
+                                          <span className="bg-yellow-300 text-slate-950 font-black text-xs px-2.5 py-0.5 rounded-md border border-yellow-400 shadow">
+                                            {res.calc.id}
+                                          </span>
+                                        </div>
                                        <span className="font-black text-lg leading-tight">
                                          € {res.match.price.toFixed(2)}
                                        </span>
@@ -1282,9 +1319,9 @@ export default function App() {
                                    onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
                                    className="p-2.5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-all flex items-center gap-2 text-blue-600 hover:text-blue-700 font-bold text-xs"
                                  >
-                                   <span className="text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-slate-200/60 text-slate-500">
-                                     Pos {res.calc.id}
-                                   </span>
+                                   <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
+                                      {res.calc.id}
+                                    </span>
                                    <span>+ Prijs invullen</span>
                                  </div>
                                )}
