@@ -54,6 +54,8 @@ import {
   onAuthStateChanged, 
   signOut,
   sendPasswordResetEmail,
+  setPersistence,
+  browserSessionPersistence,
   User as FirebaseUser 
 } from "firebase/auth";
 import { 
@@ -87,7 +89,7 @@ export default function App() {
   const [forgotPasswordStatus, setForgotPasswordStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [loginStep, setLoginStep] = useState<'password' | 'tfa'>('password');
+  const [loginStep, setLoginStep] = useState<'password' | 'tfa' | 'tfa-setup'>('password');
   const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
@@ -119,6 +121,13 @@ export default function App() {
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Set session persistence so closing tab / browser logs out user
+  useEffect(() => {
+    setPersistence(auth, browserSessionPersistence).catch((err) => {
+      console.error("Error setting session persistence:", err);
+    });
+  }, []);
 
   // Load dossiers from localStorage on mount
   useEffect(() => {
@@ -227,9 +236,11 @@ export default function App() {
             // Handle authorization based on 2FA settings
             if (effectiveTfaEnabled) {
               if (!profile.tfaSecret) {
-                // Forced TFA but no secret set yet - allow entry to setup
-                setIsAuthorized(true);
-                setView('settings');
+                // Forced TFA but no secret set yet - block and force setup
+                setIsAuthorized(false);
+                setLoginStep('tfa-setup');
+                const secret = new OTPAuth.Secret().base32;
+                setTfaSecret(secret);
               } else {
                 setIsAuthorized(false);
                 setLoginStep('tfa');
@@ -250,7 +261,10 @@ export default function App() {
               try {
                 await setDoc(doc(db, "users", u.uid), initialProfile);
                 setUserProfile(initialProfile);
-                setIsAuthorized(true);
+                setIsAuthorized(false);
+                setLoginStep('tfa-setup');
+                const secret = new OTPAuth.Secret().base32;
+                setTfaSecret(secret);
               } catch (setErr) {
                 handleFirestoreError(setErr, 'write', `users/${u.uid}`);
                 await signOut(auth);
@@ -541,6 +555,37 @@ export default function App() {
       setIsAuthorized(true);
     } else {
       alert("Ongeldige 2FA code!");
+    }
+  };
+
+  const handleTfaSetupVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tfaSecret || !user) return;
+    const totp = new OTPAuth.TOTP({
+      issuer: "PartVerify Pro",
+      label: user.email || "User",
+      algorithm: "SHA1",
+      digits: 6,
+      period: 30,
+      secret: tfaSecret,
+    });
+
+    const delta = totp.validate({ token: tfaCode, window: 1 });
+    if (delta !== null) {
+      try {
+        await updateDoc(doc(db, "users", user.uid), {
+          tfaEnabled: true,
+          tfaSecret: tfaSecret
+        });
+        setIsTfaEnabled(true);
+        setIsAuthorized(true);
+        setToastMsg("2FA succesvol ingesteld!");
+        setTimeout(() => setToastMsg(null), 3000);
+      } catch (err) {
+        alert("Fout bij opslaan van 2FA instellingen.");
+      }
+    } else {
+      alert("Ongeldige code. Probeer het opnieuw.");
     }
   };
 
@@ -927,8 +972,10 @@ export default function App() {
               </div>
             </div>
             <h1 className="text-3xl font-bold text-white tracking-tight">PartVerify Pro</h1>
-            <p className="text-slate-400 mt-2 text-center">
-              {loginStep === 'password' ? 'Beveiligde toegang tot onderdelen controle' : 'Voer uw 2FA code in'}
+            <p className="text-slate-400 mt-2 text-center text-xs">
+              {loginStep === 'password' && 'Beveiligde toegang tot onderdelen controle'}
+              {loginStep === 'tfa' && 'Voer uw 2FA code in'}
+              {loginStep === 'tfa-setup' && 'Stel twee-staps verificatie (2FA) in'}
             </p>
           </div>
 
@@ -996,6 +1043,63 @@ export default function App() {
                   className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
                 >
                   {authLoading ? <RefreshCw className="w-5 h-5 animate-spin" /> : "Inloggen"}
+                </button>
+              </motion.form>
+            ) : loginStep === 'tfa-setup' ? (
+              <motion.form 
+                key="tfa-setup"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                onSubmit={handleTfaSetupVerify} 
+                className="space-y-4 text-left"
+              >
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 text-slate-300 text-xs space-y-3 leading-relaxed">
+                  <p className="font-semibold text-white">Scanner / Handmatige Setup:</p>
+                  <p>Scan deze QR code met uw Microsoft, Google of een andere Authenticator app:</p>
+                  
+                  {tfaSecret && (
+                    <div className="bg-white p-3 rounded-xl flex justify-center w-[136px] mx-auto">
+                      <QRCodeCanvas 
+                        value={`otpauth://totp/PartVerify%20Pro:${encodeURIComponent(user?.email || "User")}?secret=${tfaSecret}&issuer=PartVerify%20Pro`}
+                        size={112}
+                        bgColor="#ffffff"
+                        fgColor="#090d16"
+                        level="M"
+                      />
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-slate-400">Of voeg de geheime sleutel handmatig toe:</p>
+                  <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 font-mono text-[11px] break-all select-all text-blue-400 text-center select-all">
+                    {tfaSecret}
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+                  <input 
+                    type="text"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={tfaCode}
+                    onChange={(e) => setTfaCode(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl py-4 pl-12 pr-4 text-white text-center text-2xl tracking-[0.5em] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all placeholder:text-slate-600 placeholder:tracking-normal placeholder:font-sans"
+                    autoFocus
+                  />
+                </div>
+                <button 
+                  type="submit"
+                  className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition-all active:scale-[0.98]"
+                >
+                  Verifiëren & Activeren
+                </button>
+                <button 
+                  type="button"
+                  onClick={handleLogout}
+                  className="w-full text-slate-500 text-sm hover:text-slate-300 transition-colors py-2 block text-center"
+                >
+                  Terug naar inloggen
                 </button>
               </motion.form>
             ) : (
@@ -2212,6 +2316,23 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
   const [attempts, setAttempts] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'logs' | 'history'>('clients');
+  const [historySearch, setHistorySearch] = useState("");
+
+  const filteredDossiers = useMemo(() => {
+    if (!savedDossiers) return [];
+    if (!historySearch.trim()) return savedDossiers;
+    const cleanQuery = historySearch.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return savedDossiers.filter((d: any) => {
+      const caseNum = (d.caseNumber || "").toLowerCase();
+      const licPlate = (d.licensePlate || "").toLowerCase();
+      const cleanLicPlate = licPlate.replace(/[^a-z0-9]/g, '');
+      const cleanCaseNum = caseNum.replace(/[^a-z0-9]/g, '');
+      return caseNum.includes(historySearch.toLowerCase()) || 
+             licPlate.includes(historySearch.toLowerCase()) ||
+             cleanLicPlate.includes(cleanQuery) ||
+             cleanCaseNum.includes(cleanQuery);
+    });
+  }, [savedDossiers, historySearch]);
 
   // Client management state
   const [newClientName, setNewClientName] = useState("");
@@ -2532,100 +2653,145 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
                 <p className="text-xs text-slate-500 font-medium font-bold uppercase">Overzicht van recent bewaarde dossiers op dit apparaat.</p>
               </div>
             </div>
-            <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 uppercase tracking-widest">
+            <span className="text-[11px] font-black text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100 uppercase tracking-widest block shrink-0 leading-none">
               {savedDossiers?.length || 0} dossiers
             </span>
           </div>
 
-          {savedDossiers && savedDossiers.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {savedDossiers.map((d: any) => {
-                const totalDiff = d.stats?.totalPriceDiff ?? 0;
-                return (
-                  <div 
-                    key={d.id}
-                    onClick={() => loadDossier(d)}
-                    className="group border border-slate-200 hover:border-blue-400 p-6 rounded-[2rem] bg-slate-50/30 hover:bg-white cursor-pointer transition-all flex flex-col justify-between shadow-sm hover:shadow-lg hover:-translate-y-1 relative duration-350"
-                  >
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start gap-4">
-                        <div className="space-y-1 text-left">
-                          <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-0.5 rounded leading-none">
-                            {d.clientName}
-                          </span>
-                          <h4 className="text-base font-black text-slate-950 truncate max-w-[150px]">
-                            {d.caseNumber !== "Onbekend" ? d.caseNumber : "Geen Dossiernr"}
-                          </h4>
-                        </div>
-                        {d.licensePlate !== "Onbekend" && (
-                          <div className="bg-[#FFD600] text-slate-950 font-mono font-extrabold text-[10px] px-2.5 py-1 rounded border-1.5 border-slate-950 shadow-inner flex shrink-0 leading-none items-center h-6">
-                            {d.licensePlate.toUpperCase().replace(/[^a-zA-Z0-9]/g, '')}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="border-t border-slate-100/80 pt-3 space-y-2 text-left">
-                        <div className="flex justify-between text-xs text-slate-500">
-                          <span>Aanmaakdatum:</span>
-                          <span className="font-bold text-slate-700">{new Date(d.savedAt).toLocaleDateString('nl-NL')}</span>
-                        </div>
-                        {d.stats && (
-                          <>
-                            <div className="flex justify-between text-xs text-slate-500">
-                              <span>Goedgekeurd Bedrag:</span>
-                              <span className="font-bold text-slate-800">€{d.stats.totalVerifiedAmount?.toFixed(2) || "0.00"}</span>
-                            </div>
-                            <div className="flex justify-between text-xs text-slate-500">
-                              <span>Afwijkingen:</span>
-                              <span className={`font-semibold ${d.stats.deviations > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                                {d.stats.deviations} {d.stats.deviations === 1 ? 'regel' : 'regels'}
-                              </span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-100/80 pt-4 mt-4 flex items-center justify-between gap-4">
-                      {d.stats?.totalPriceDiff !== undefined ? (
-                        <div className="text-left">
-                          <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider font-bold">Resultaat</span>
-                          <span className={`text-sm font-black tracking-tight ${
-                            totalDiff > 0 ? 'text-amber-600' : 'text-emerald-600'
-                          }`}>
-                            {totalDiff > 0 ? 'Kostenstijging' : 'Besparing'} €{Math.abs(totalDiff).toFixed(2)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="h-6" />
-                      )}
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            loadDossier(d);
-                          }}
-                          className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors"
-                        >
-                          Laden
-                        </button>
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteDossier(d.id, e);
-                          }}
-                          className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
-                          title="Verwijder uit historie"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+          {savedDossiers && savedDossiers.length > 0 && (
+            <div className="relative max-w-md text-left">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <Search size={16} />
+              </div>
+              <input
+                type="text"
+                placeholder="Zoeken op kenteken of dossiernummer..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+                className="w-full pl-10 pr-10 py-3 bg-slate-50 hover:bg-slate-100/50 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-2xl text-xs font-bold text-slate-700 placeholder-slate-400 focus:outline-none transition-all shadow-sm"
+                id="dossier-history-search"
+              />
+              {historySearch && (
+                <button
+                  onClick={() => setHistorySearch("")}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  title="Wissen"
+                >
+                  <X size={16} />
+                </button>
+              )}
             </div>
+          )}
+
+          {savedDossiers && savedDossiers.length > 0 ? (
+            filteredDossiers.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredDossiers.map((d: any) => {
+                  const totalDiff = d.stats?.totalPriceDiff ?? 0;
+                  return (
+                    <div 
+                      key={d.id}
+                      onClick={() => loadDossier(d)}
+                      className="group border border-slate-200 hover:border-blue-400 p-6 rounded-[2rem] bg-slate-50/30 hover:bg-white cursor-pointer transition-all flex flex-col justify-between shadow-sm hover:shadow-lg hover:-translate-y-1 relative duration-350"
+                    >
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-start gap-4">
+                          <div className="space-y-1 text-left">
+                            <span className="text-[10px] font-black uppercase text-slate-400 bg-slate-100 px-2 py-0.5 rounded leading-none">
+                              {d.clientName}
+                            </span>
+                            <h4 className="text-base font-black text-slate-950 truncate max-w-[150px]">
+                              {d.caseNumber !== "Onbekend" ? d.caseNumber : "Geen Dossiernr"}
+                            </h4>
+                          </div>
+                          {d.licensePlate !== "Onbekend" && (
+                            <div className="bg-[#FFD600] text-slate-950 font-mono font-extrabold text-[10px] px-2.5 py-1 rounded border-1.5 border-slate-950 shadow-inner flex shrink-0 leading-none items-center h-6">
+                              {d.licensePlate.toUpperCase().replace(/[^a-zA-Z0-9]/g, '')}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="border-t border-slate-100/80 pt-3 space-y-2 text-left">
+                          <div className="flex justify-between text-xs text-slate-500">
+                            <span>Aanmaakdatum:</span>
+                            <span className="font-bold text-slate-700">{new Date(d.savedAt).toLocaleDateString('nl-NL')}</span>
+                          </div>
+                          {d.stats && (
+                            <>
+                              <div className="flex justify-between text-xs text-slate-500">
+                                <span>Goedgekeurd Bedrag:</span>
+                                <span className="font-bold text-slate-800">€{d.stats.totalVerifiedAmount?.toFixed(2) || "0.00"}</span>
+                              </div>
+                              <div className="flex justify-between text-xs text-slate-500">
+                                <span>Afwijkingen:</span>
+                                <span className={`font-semibold ${d.stats.deviations > 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                                  {d.stats.deviations} {d.stats.deviations === 1 ? 'regel' : 'regels'}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="border-t border-slate-100/80 pt-4 mt-4 flex items-center justify-between gap-4">
+                        {d.stats?.totalPriceDiff !== undefined ? (
+                          <div className="text-left">
+                            <span className="text-[9px] font-black uppercase text-slate-400 block tracking-wider font-bold">Resultaat</span>
+                            <span className={`text-sm font-black tracking-tight ${
+                              totalDiff > 0 ? 'text-amber-600' : 'text-emerald-600'
+                            }`}>
+                              {totalDiff > 0 ? 'Kostenstijging' : 'Besparing'} €{Math.abs(totalDiff).toFixed(2)}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="h-6" />
+                        )}
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              loadDossier(d);
+                            }}
+                            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors"
+                          >
+                            Laden
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteDossier(d.id, e);
+                            }}
+                            className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-colors"
+                            title="Verwijder uit historie"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl text-slate-400 space-y-4">
+                <div className="p-4 bg-slate-50 rounded-full text-slate-300">
+                  <Search size={36} />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-black uppercase text-slate-500 tracking-wider font-bold">Geen Dossiers Gevonden</h4>
+                  <p className="text-xs text-slate-400 max-w-sm">
+                    Geen bewaarde dossiers gevonden die overeenkomen met "{historySearch}".
+                  </p>
+                </div>
+                <button
+                  onClick={() => setHistorySearch("")}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-bold transition-all"
+                >
+                  Wissen
+                </button>
+              </div>
+            )
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-slate-100 rounded-3xl text-slate-400 space-y-4">
               <div className="p-4 bg-slate-50 rounded-full text-slate-300">
