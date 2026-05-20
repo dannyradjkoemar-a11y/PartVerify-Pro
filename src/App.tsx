@@ -380,13 +380,21 @@ export default function App() {
         descriptionsMatch(calcPart.description, invPart.description)
       ) : null;
 
-      const finalMatch = match || semanticMatch;
+      const clientPriceList = clientPrices[normalizedCalc] || [];
+      const matchingPriceClient = clientPriceList.find(p => Math.abs(p - calcPart.price) < 0.005);
+      const matchesClientPrice = matchingPriceClient !== undefined;
+
+      const virtualClientMatch = matchesClientPrice ? {
+        id: `CLIENT-${calcPart.id}`,
+        description: `Prijslijst: ${clients.find(c => c.id === selectedClientId)?.name || 'Opdrachtgever'}`,
+        partNumber: calcPart.partNumber,
+        price: matchingPriceClient
+      } : null;
+
+      const finalMatch = match || semanticMatch || virtualClientMatch;
 
       const overrideKey = `${calcPart.id}-${calcPart.partNumber}`;
       const manualPrice = manualOverrides[overrideKey];
-
-      const clientPriceList = clientPrices[normalizedCalc] || [];
-      const matchesClientPrice = clientPriceList.some(p => Math.abs(p - calcPart.price) < 0.005);
 
       const priceDiff = manualPrice !== undefined 
         ? manualPrice - calcPart.price 
@@ -946,6 +954,39 @@ export default function App() {
             </div>
 
 
+            {/* Quick Count Comparison Banner */}
+            {(calculationParts.length > 0 || invoiceParts.length > 0) && (
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                    <Layers size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">Vergelijkingsmeter</h4>
+                    <p className="text-[11px] text-slate-500">Snel overzicht van gedetecteerde onderdelen aan beide zijden.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-right">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Eindcalculatie</span>
+                    <span className="text-sm font-black text-blue-600">{calculationParts.length} stuks</span>
+                  </div>
+                  <div className="h-8 w-px bg-slate-200" />
+                  <div className="text-right">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inkoopfacturen</span>
+                    <span className="text-sm font-black text-indigo-600">{invoiceParts.length} stuks</span>
+                  </div>
+                  <div className="h-8 w-px bg-slate-200" />
+                  <div>
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Verschil</span>
+                    <span className={`text-sm font-black ${calculationParts.length === invoiceParts.length ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {Math.abs(calculationParts.length - invoiceParts.length)} {calculationParts.length === invoiceParts.length ? '✓' : 'stuks'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Inputs - Stacked vertically for clarity as requested */}
             <div className="space-y-10">
               <InputSection 
@@ -954,6 +995,7 @@ export default function App() {
                 value={calcInput} 
                 onChange={setCalcInput} 
                 icon={<ClipboardCheck className="w-5 h-5 text-blue-600" />}
+                partCount={calculationParts.length}
               />
               <InputSection 
                 title="Inkoopfacturen" 
@@ -961,6 +1003,7 @@ export default function App() {
                 value={invoiceInput} 
                 onChange={setInvoiceInput} 
                 icon={<Layers className="w-5 h-5 text-indigo-600" />}
+                partCount={invoiceParts.length}
               />
             </div>
 
@@ -1132,65 +1175,120 @@ export default function App() {
                                   />
                                 </div>
                               ) : (
-                                <>€ {res.calc.price.toFixed(2)}</>
+                                res.status === 'deviation' ? (
+                                  <div className="flex flex-col">
+                                    <span className="text-slate-400 line-through decoration-rose-500 decoration-2 text-sm">
+                                      € {res.calc.price.toFixed(2)}
+                                    </span>
+                                    <span className="text-[9px] text-rose-500 font-bold uppercase tracking-wider">AFWIJKING ({res.calc.price.toFixed(2)})</span>
+                                  </div>
+                                ) : (
+                                  <>€ {res.calc.price.toFixed(2)}</>
+                                )
                               )}
                             </td>
-                            <td className="px-6 py-4">
-                              {editingCell === `${res.calc.id}-${res.calc.partNumber}` ? (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-blue-500 font-black">€</span>
-                                  <input 
-                                    type="text"
-                                    autoFocus
-                                    defaultValue={(res.manualPrice || res.match?.price || res.calc.price).toString().replace('.', ',')}
-                                    onBlur={(e) => {
-                                      const val = parseFloat(e.target.value.replace(',', '.'));
-                                      if (!isNaN(val)) {
-                                        setManualOverrides(prev => ({ ...prev, [`${res.calc.id}-${res.calc.partNumber}`]: val }));
-                                      }
-                                      setEditingCell(null);
-                                    }}
-                                    className="w-28 p-2 border-2 border-blue-400 rounded-lg text-base font-black text-blue-700 focus:outline-none shadow-sm"
-                                  />
-                                </div>
-                              ) : res.manualPrice !== undefined ? (
-                                <div className="flex items-center justify-between group/price cursor-pointer" onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}>
-                                  <div className="text-emerald-600 font-extrabold text-base">
-                                    € {res.manualPrice?.toFixed(2)}
-                                    <span className="ml-2 text-[9px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded uppercase tracking-wider font-bold">Aangepast</span>
-                                  </div>
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); removeOverride(res.calc.id, res.calc.partNumber); }}
-                                    className="opacity-0 group-hover/price:opacity-100 text-slate-400 hover:text-rose-500 transition-all p-1"
-                                    title="Aanpassing ongedaan maken"
-                                  >
-                                    <RefreshCw size={14} />
-                                  </button>
-                                </div>
-                              ) : res.match ? (
-                                <div className="space-y-1 cursor-pointer group/price" onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-slate-700 text-xs font-semibold truncate max-w-[150px]">{res.match.description}</span>
-                                    {res.isSemantic && (
-                                      <span title="Intelligente match op beschrijving" className="text-indigo-500 cursor-help">
-                                        <AlertCircle size={14} />
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className={`font-black text-base ${res.status === 'deviation' ? 'text-rose-600' : 'text-emerald-600'}`}>€ {res.match.price.toFixed(2)}</span>
-                                    <code className="text-[9px] font-mono text-slate-400">{res.match.partNumber}</code>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button 
-                                  onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
-                                  className="text-blue-500 hover:text-blue-700 text-sm font-black underline flex items-center gap-1 transition-colors"
-                                >
-                                  + Prijs invullen
-                                </button>
-                              )}
-                            </td>
+                             <td className="px-6 py-4">
+                               {editingCell === `${res.calc.id}-${res.calc.partNumber}` ? (
+                                 <div className="flex items-center gap-2">
+                                   <span className="text-blue-500 font-black">€</span>
+                                   <input 
+                                     type="text"
+                                     autoFocus
+                                     defaultValue={(res.manualPrice || res.match?.price || res.calc.price).toString().replace('.', ',')}
+                                     onBlur={(e) => {
+                                       const val = parseFloat(e.target.value.replace(',', '.'));
+                                       if (!isNaN(val)) {
+                                         setManualOverrides(prev => ({ ...prev, [`${res.calc.id}-${res.calc.partNumber}`]: val }));
+                                       }
+                                       setEditingCell(null);
+                                     }}
+                                     className="w-28 p-2 border-2 border-blue-400 rounded-lg text-base font-black text-blue-700 focus:outline-none shadow-sm"
+                                   />
+                                 </div>
+                               ) : res.manualPrice !== undefined ? (
+                                 <div 
+                                   onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
+                                   className="p-2.5 rounded-2xl border-2 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 cursor-pointer shadow-sm flex items-center justify-between transition-all"
+                                 >
+                                   <div className="flex flex-col gap-1">
+                                     <div className="flex items-center gap-1.5">
+                                       <span className="text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                                         Pos {res.calc.id}
+                                       </span>
+                                       <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/50 px-1.5 py-0.5 rounded-md uppercase tracking-wider">Aangepast</span>
+                                     </div>
+                                     <div className="text-emerald-700 font-black text-base">
+                                       € {res.manualPrice?.toFixed(2)}
+                                     </div>
+                                   </div>
+                                   <button 
+                                     onClick={(e) => { e.stopPropagation(); removeOverride(res.calc.id, res.calc.partNumber); }}
+                                     className="text-slate-400 hover:text-rose-500 transition-all p-1.5 bg-white hover:bg-rose-50 rounded-lg shadow-sm"
+                                     title="Aanpassing ongedaan maken"
+                                   >
+                                     <RefreshCw size={12} />
+                                   </button>
+                                 </div>
+                               ) : res.match ? (
+                                 <div 
+                                   onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
+                                   className={`p-3 rounded-2xl border-2 cursor-pointer transition-all shadow-md ${
+                                     res.status === 'matched' 
+                                       ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                                       : 'bg-rose-50 border-rose-300 hover:bg-rose-100 ring-2 ring-rose-500/10'
+                                   }`}
+                                 >
+                                   <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                     <span className={`text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded ${
+                                       res.status === 'matched' 
+                                         ? 'bg-emerald-100 text-emerald-800' 
+                                         : 'bg-rose-100 text-rose-800'
+                                     }`}>
+                                       Pos {res.calc.id}
+                                     </span>
+                                     <span className="text-slate-700 text-xs font-bold truncate max-w-[150px]" title={res.match.description}>
+                                       {res.match.description}
+                                     </span>
+                                     {res.isSemantic && (
+                                       <span title="Intelligente match op beschrijving" className="text-indigo-600 bg-indigo-50 border border-indigo-150 px-1 py-0.5 text-[8px] rounded font-bold uppercase tracking-widest">
+                                         Sem
+                                       </span>
+                                     )}
+                                   </div>
+                                   
+                                   {res.status === 'deviation' ? (
+                                     <div className="mt-1.5 p-2.5 bg-emerald-600 rounded-xl text-white shadow-md border border-emerald-500 flex flex-col gap-0.5">
+                                       <span className="text-[10px] uppercase font-black tracking-widest text-emerald-100 flex items-center gap-1">
+                                         <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                         👉 CORRECTE PRIJS:
+                                       </span>
+                                       <span className="font-black text-lg leading-tight">
+                                         € {res.match.price.toFixed(2)}
+                                       </span>
+                                     </div>
+                                   ) : (
+                                     <div className="flex items-center gap-2">
+                                       <span className="font-black text-base text-emerald-600">
+                                         € {res.match.price.toFixed(2)}
+                                       </span>
+                                       <code className="text-[10px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/50 whitespace-nowrap">
+                                          {res.match.partNumber}
+                                       </code>
+                                     </div>
+                                   )}
+                                 </div>
+                               ) : (
+                                 <div 
+                                   onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
+                                   className="p-2.5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-all flex items-center gap-2 text-blue-600 hover:text-blue-700 font-bold text-xs"
+                                 >
+                                   <span className="text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-slate-200/60 text-slate-500">
+                                     Pos {res.calc.id}
+                                   </span>
+                                   <span>+ Prijs invullen</span>
+                                 </div>
+                               )}
+                             </td>
                             <td className="px-6 py-4">
                               {res.priceDiff !== 0 ? (
                                 <span className={`font-black text-base ${res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
@@ -1693,14 +1791,23 @@ function StatsCard({ label, value, icon, color }: { label: string, value: string
   );
 }
 
-function InputSection({ title, placeholder, value, onChange, icon }: { title: string, placeholder: string, value: string, onChange: (v: string) => void, icon?: React.ReactNode }) {
+function InputSection({ title, placeholder, value, onChange, icon, partCount }: { title: string, placeholder: string, value: string, onChange: (v: string) => void, icon?: React.ReactNode, partCount?: number }) {
   return (
     <div className="flex flex-col space-y-3">
       <div className="flex items-center justify-between">
-        <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
-          {icon}
-          {title}
-        </label>
+        <div className="flex items-center gap-3">
+          <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+            {icon}
+            {title}
+          </label>
+          {partCount !== undefined && partCount > 0 && (
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+              title === "Eindcalculatie" ? "bg-blue-100 text-blue-700" : "bg-indigo-100 text-indigo-700"
+            }`}>
+              {partCount} {partCount === 1 ? 'onderdeel' : 'onderdelen'}
+            </span>
+          )}
+        </div>
         {value && (
           <button 
             onClick={() => onChange("")}
