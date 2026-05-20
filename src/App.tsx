@@ -98,6 +98,9 @@ export default function App() {
 
   const [caseNumber, setCaseNumber] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
+  const [vehicleData, setVehicleData] = useState<any>(null);
+  const [vehicleLoading, setVehicleLoading] = useState<boolean>(false);
+  const [vehicleError, setVehicleError] = useState<string | null>(null);
   const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
@@ -203,6 +206,62 @@ export default function App() {
       loadClients();
     }
   }, [isAuthorized]);
+
+  // Fetch RDW Vehicle Data for license plates
+  useEffect(() => {
+    const cleanPlate = licensePlate.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (cleanPlate.length < 6) {
+      setVehicleData(null);
+      setVehicleError(null);
+      return;
+    }
+
+    const handler = setTimeout(async () => {
+      setVehicleLoading(true);
+      setVehicleError(null);
+      try {
+        const res = await fetch(`https://opendata.rdw.nl/resource/m9d7-ebf2.json?kenteken=${cleanPlate}`);
+        if (!res.ok) {
+          throw new Error('RDW serverfout');
+        }
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setVehicleData(data[0]);
+        } else {
+          setVehicleData(null);
+          setVehicleError("Voertuig niet gevonden");
+        }
+      } catch (err) {
+        console.error("RDW ophaalfout:", err);
+        setVehicleError("Fout bij ophalen RDW-data");
+      } finally {
+        setVehicleLoading(false);
+      }
+    }, 650);
+
+    return () => clearTimeout(handler);
+  }, [licensePlate]);
+
+  // Formatting helpers for RDW data
+  const formatDateRDW = (dateStr?: string) => {
+    if (!dateStr || dateStr.length !== 8) return dateStr || "Onbekend";
+    const yyyy = dateStr.substring(0, 4);
+    const mm = dateStr.substring(4, 6);
+    const dd = dateStr.substring(6, 8);
+    return `${dd}-${mm}-${yyyy}`;
+  };
+
+  const formatCurrency = (valStr?: string) => {
+    if (!valStr) return "Onbekend";
+    const num = parseFloat(valStr);
+    if (isNaN(num)) return valStr;
+    return new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(num);
+  };
+
+  const capitalizeWords = (str?: string) => {
+    if (!str) return "Onbekend";
+    return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
 
   // Fetch prices for selected client
   useEffect(() => {
@@ -912,6 +971,87 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* RDW Voertuiggegevens */}
+            <AnimatePresence mode="wait">
+              {vehicleLoading ? (
+                <motion.div 
+                  key="loading"
+                  initial={{ opacity: 0, height: 0, y: -10 }}
+                  animate={{ opacity: 1, height: "auto", y: 0 }}
+                  exit={{ opacity: 0, height: 0, y: -10 }}
+                  className="bg-slate-50 border border-slate-200 p-4 rounded-3xl flex items-center justify-center gap-3 shadow-inner"
+                >
+                  <RefreshCw size={18} className="animate-spin text-blue-600" />
+                  <span className="text-sm font-bold text-slate-500">RDW voertuiggegevens ophalen...</span>
+                </motion.div>
+              ) : vehicleData ? (
+                <motion.div 
+                  key="data"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="bg-gradient-to-br from-indigo-50/70 to-blue-50/40 border border-blue-250 p-5 rounded-3xl shadow-sm flex flex-col md:flex-row gap-6 items-center md:items-stretch group"
+                >
+                  {/* Left license plate element */}
+                  <div className="bg-blue-600 text-white px-5 py-4 rounded-2xl flex flex-col items-center justify-center gap-1.5 w-full md:w-44 shrink-0 shadow-md shadow-blue-500/10 hover:shadow-lg transition-all relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full translate-x-12 -translate-y-12 pointer-events-none" />
+                    <CarFront size={32} className="text-blue-100 animate-pulse" />
+                    <span className="text-[9px] uppercase font-black tracking-widest text-blue-200">R.D.W. INFO</span>
+                    <div className="mt-1 font-mono font-black border border-white/30 bg-white/20 px-3 py-1 rounded-lg text-sm tracking-wider shadow-inner uppercase">
+                      {licensePlate.toUpperCase()}
+                    </div>
+                  </div>
+                  
+                  {/* Grid of specifications */}
+                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 w-full">
+                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Merk</span>
+                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5">{capitalizeWords(vehicleData.merk)}</span>
+                    </div>
+                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Model</span>
+                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5 max-w-full truncate" title={vehicleData.handelsbenaming}>
+                        {capitalizeWords(vehicleData.handelsbenaming)}
+                      </span>
+                    </div>
+                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Kleur</span>
+                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5">{capitalizeWords(vehicleData.eerste_kleur)}</span>
+                    </div>
+                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Catalogusprijs</span>
+                      <span className="font-extrabold text-sm text-emerald-600 tracking-tight mt-0.5">{formatCurrency(vehicleData.catalogusprijs)}</span>
+                    </div>
+                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">Datum Toelating</span>
+                      <span className="font-extrabold text-sm text-slate-800 tracking-tight mt-0.5">{formatDateRDW(vehicleData.datum_eerste_toelating)}</span>
+                    </div>
+                    <div className="bg-white/80 backdrop-blur-sm p-3.5 rounded-2xl border border-slate-200/50 hover:border-blue-200 transition-all flex flex-col justify-center">
+                      <span className="text-[9px] uppercase font-black tracking-widest text-slate-400">APK Vervaldatum</span>
+                      <span className={`font-extrabold text-sm tracking-tight mt-0.5 ${
+                        vehicleData.vervaldatum_apk && parseInt(vehicleData.vervaldatum_apk) < parseInt(new Date().toISOString().slice(0, 10).replace(/[^0-9]/g, ''))
+                          ? 'text-rose-600'
+                          : 'text-blue-600'
+                      }`}>
+                        {formatDateRDW(vehicleData.vervaldatum_apk)}
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : vehicleError && licensePlate.replace(/[^a-zA-Z0-9]/g, '').length >= 6 ? (
+                <motion.div 
+                  key="error"
+                  initial={{ opacity: 0, y: -15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  className="bg-amber-50/70 border border-amber-200 p-4 rounded-3xl flex items-center gap-3 shadow-sm"
+                >
+                  <AlertCircle size={18} className="text-amber-600 animate-pulse" />
+                  <span className="text-xs font-bold text-amber-700">Geen voertuiggegevens gevonden voor {licensePlate.toUpperCase()} (RDW Open Data)</span>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
 
             {/* Main Stats: Financials vs Breakdown */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
