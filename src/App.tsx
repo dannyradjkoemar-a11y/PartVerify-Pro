@@ -1502,7 +1502,7 @@ export default function App() {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
                   <div className="flex items-center justify-between gap-3">
                     {/* Dutch styled license plate input */}
-                    <div className="relative flex items-center bg-[#FFD600] text-slate-950 font-mono font-black border-2 border-slate-950 rounded-xl overflow-hidden shadow-md h-12 flex-1 max-w-[220px] transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
+                    <div className="relative flex items-center bg-[#FFD600] text-slate-950 font-mono font-black border-2 border-slate-950 rounded-xl overflow-hidden shadow-md h-12 flex-1 max-w-[260px] transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
                       {/* EU/NL banner */}
                       <div className="bg-[#0039AE] text-white text-[7px] px-2 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r border-slate-950/20">
                         <span className="text-[8px] text-[#FFD600] font-sans leading-none mb-1">★★</span>
