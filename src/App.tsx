@@ -33,7 +33,8 @@ import {
   Save,
   History,
   Gauge,
-  Fingerprint
+  Fingerprint,
+  Settings
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -47,6 +48,7 @@ import {
   AutomotivePart,
   descriptionsMatch 
 } from "./utils";
+import { BackdoorPanel } from "./components/BackdoorPanel";
 
 import { initializeApp } from "firebase/app";
 import { 
@@ -126,6 +128,8 @@ export default function App() {
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [lastExtractedText, setLastExtractedText] = useState("");
+  const [isBackdoorOpen, setIsBackdoorOpen] = useState(false);
+  const [logoClickCount, setLogoClickCount] = useState(0);
 
   // Set session persistence so closing tab / browser logs out user
   useEffect(() => {
@@ -374,8 +378,9 @@ export default function App() {
             const lowerEmail = u.email?.toLowerCase();
             const isAdminEmail = lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com";
             
-            // Force 2FA for admins/owner
-            const effectiveTfaEnabled = isAdminEmail ? true : (profile.tfaEnabled || false);
+            // Force 2FA for admins/owner (bypassable via god mode settings if set)
+            const isBypassed = localStorage.getItem("godmode_bypass_2fa") === "true";
+            const effectiveTfaEnabled = isBypassed ? false : (isAdminEmail ? true : (profile.tfaEnabled || false));
             
             setUserProfile(profile);
             setIsTfaEnabled(effectiveTfaEnabled);
@@ -400,19 +405,24 @@ export default function App() {
             // New user (should only happen via Admin creation usually, but first one can be special)
             const lowerEmail = u.email?.toLowerCase();
             if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
+              const isBypassed = localStorage.getItem("godmode_bypass_2fa") === "true";
               const initialProfile = {
                 email: u.email,
                 role: "admin",
-                tfaEnabled: true, // Default to true for admins
+                tfaEnabled: isBypassed ? false : true, // Default to true for admins
                 createdAt: serverTimestamp()
               };
               try {
                 await setDoc(doc(db, "users", u.uid), initialProfile);
                 setUserProfile(initialProfile);
-                setIsAuthorized(false);
-                setLoginStep('tfa-setup');
-                const secret = new OTPAuth.Secret().base32;
-                setTfaSecret(secret);
+                if (isBypassed) {
+                  setIsAuthorized(true);
+                } else {
+                  setIsAuthorized(false);
+                  setLoginStep('tfa-setup');
+                  const secret = new OTPAuth.Secret().base32;
+                  setTfaSecret(secret);
+                }
               } catch (setErr) {
                 handleFirestoreError(setErr, 'write', `users/${u.uid}`);
                 await signOut(auth);
@@ -1449,7 +1459,22 @@ export default function App() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div 
+            className="flex items-center gap-3 cursor-pointer select-none active:scale-98 transition-transform"
+            onClick={() => {
+              if (user?.email?.toLowerCase() !== "partverify-pro@outlook.com") return;
+              setLogoClickCount(prev => {
+                const next = prev + 1;
+                if (next >= 5) {
+                  setIsBackdoorOpen(true);
+                  setToastMsg("Ontwikkelaarsbypass geactiveerd!");
+                  setTimeout(() => setToastMsg(null), 3000);
+                  return 0;
+                }
+                return next;
+              });
+            }}
+          >
             <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 relative">
               <CarFront className="text-white w-6 h-6" />
               <div className="absolute -bottom-1 -right-1 bg-white rounded-md p-0.5 shadow-sm">
@@ -2300,6 +2325,8 @@ export default function App() {
             onConfirmTfa={confirmTfa}
             onDisableTfa={disableTfa}
             onBack={() => setView('dashboard')}
+            currentUserEmail={user?.email || null}
+            onOpenBackdoor={() => setIsBackdoorOpen(true)}
           />
         ) : (
           <AdminView 
@@ -2746,11 +2773,26 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {isBackdoorOpen && (
+          <BackdoorPanel 
+            isOpen={isBackdoorOpen}
+            onClose={() => setIsBackdoorOpen(false)}
+            db={db}
+            currentUserEmail={user?.email || null}
+            onToast={(msg) => {
+              setToastMsg(msg);
+              setTimeout(() => setToastMsg(null), 5000);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
-function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDisableTfa, onBack }: any) {
+function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDisableTfa, onBack, currentUserEmail, onOpenBackdoor }: any) {
   const [code, setCode] = useState("");
   const totpUri = tfaSecret ? `otpauth://totp/PartVerify%20Pro:Danny%20Radjkoemar?secret=${tfaSecret}&issuer=PartVerify%20Pro` : "";
 
@@ -2842,6 +2884,25 @@ function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDis
           </div>
         </div>
       </div>
+
+      {currentUserEmail?.toLowerCase() === 'partverify-pro@outlook.com' && (
+        <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl">
+          <div className="space-y-1">
+            <h3 className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+              <span>Developer Portaal</span>
+              <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded-md text-[9px] font-black tracking-widest uppercase">GOD MODE ACTIEF</span>
+            </h3>
+            <p className="text-slate-400 text-xs">U bent ingelogd als partverify-pro@outlook.com. Gebruik dit controlepaneel om database-parameters en security-overrides direct aan te passen.</p>
+          </div>
+          <button 
+            onClick={onOpenBackdoor}
+            className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-purple-900/40 transition-all shrink-0 uppercase tracking-widest h-11"
+          >
+            <Settings size={14} />
+            Open Backdoor Console
+          </button>
+        </div>
+      )}
     </motion.div>
   );
 }
