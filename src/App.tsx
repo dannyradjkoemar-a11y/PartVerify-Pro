@@ -31,7 +31,8 @@ import {
   Activity,
   Info,
   Save,
-  History
+  History,
+  Gauge
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -110,6 +111,7 @@ export default function App() {
 
   const [caseNumber, setCaseNumber] = useState("");
   const [licensePlate, setLicensePlate] = useState("");
+  const [kmStand, setKmStand] = useState<string>("");
   const [vehicleData, setVehicleData] = useState<any>(null);
   const [vehicleLoading, setVehicleLoading] = useState<boolean>(false);
   const [vehicleError, setVehicleError] = useState<string | null>(null);
@@ -151,6 +153,8 @@ export default function App() {
       id: `DOS-${Date.now()}`,
       caseNumber: caseNumber || "Onbekend",
       licensePlate: licensePlate || "Onbekend",
+      kmStand: kmStand || "",
+      vehicleData,
       calcInput,
       invoiceInput,
       selectedClientId,
@@ -176,6 +180,12 @@ export default function App() {
   const loadDossier = (dossier: any) => {
     setCaseNumber(dossier.caseNumber === "Onbekend" ? "" : dossier.caseNumber);
     setLicensePlate(dossier.licensePlate === "Onbekend" ? "" : dossier.licensePlate);
+    setKmStand(dossier.kmStand || "");
+    if (dossier.vehicleData) {
+      setVehicleData(dossier.vehicleData);
+    } else {
+      setVehicleData(null);
+    }
     setCalcInput(dossier.calcInput || "");
     setInvoiceInput(dossier.invoiceInput || "");
     setSelectedClientId(dossier.selectedClientId || "");
@@ -360,7 +370,7 @@ export default function App() {
     return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   };
 
-  const calculateEstimatedDagwaarde = (catalogusprijs?: string, datumToelating?: string) => {
+  const calculateEstimatedDagwaarde = (catalogusprijs?: string, datumToelating?: string, customKm?: string) => {
     if (!catalogusprijs) return null;
     const originalPrice = parseFloat(catalogusprijs);
     if (isNaN(originalPrice) || originalPrice <= 0) return null;
@@ -385,7 +395,7 @@ export default function App() {
     // Year 7+: approx -8% annually
     let factor = 1.0;
     for (let i = 0; i < Math.floor(years); i++) {
-      if (i === 0) {
+       if (i === 0) {
         factor *= 0.78; // 1st year 22% depreciation
       } else if (i < 3) {
         factor *= 0.86; // Years 2-3: 14% annual depreciation
@@ -400,10 +410,147 @@ export default function App() {
     const dropRate = Math.floor(years) === 0 ? 0.22 : Math.floor(years) < 3 ? 0.14 : Math.floor(years) < 6 ? 0.11 : 0.08;
     factor *= (1 - (dropRate * remainingFraction));
 
+    let finalValue = originalPrice * factor;
+
+    // Incorporate Mileage (Kilometerstand)
+    if (customKm) {
+      const km = parseInt(customKm.replace(/\D/g, ''));
+      if (!isNaN(km) && km > 0) {
+        // Average standard mileage in the Netherlands is ~15,000 km per year.
+        const ageInYears = Math.max(years, 0.5); // At least half a year to prevent division by extreme/zero values
+        const expectedKm = ageInYears * 15000;
+        const kmDifference = km - expectedKm;
+
+        // Apply a highly realistic correction factor:
+        // - For every 10,000 km excess mileage, the car loses about 4% of its remaining value.
+        // - For every 10,000 km lower mileage, the car gains about 3.5% of its remaining value.
+        // This is the premium depreciation adjustment standard in NL (e.g. following ANWB/BOVAG indices).
+        let kmAdjustmentFactor = 1.0;
+        if (kmDifference > 0) {
+          kmAdjustmentFactor = Math.max(0.60, 1.0 - (kmDifference / 10000) * 0.04);
+        } else if (kmDifference < 0) {
+          kmAdjustmentFactor = Math.min(1.25, 1.0 + (Math.abs(kmDifference) / 10000) * 0.035);
+        }
+        finalValue *= kmAdjustmentFactor;
+      }
+    }
+
     // A car's residual value floor is usually around 8% of original value, minimum of €750
     const floorValue = originalPrice * 0.08;
-    const finalValue = Math.max(originalPrice * factor, floorValue, 750);
-    return finalValue;
+    return Math.max(finalValue, floorValue, 750);
+  };
+
+  const getVehicleYear = (datumStr?: string) => {
+    if (!datumStr || datumStr.length < 4) return null;
+    const year = parseInt(datumStr.substring(0, 4));
+    return isNaN(year) ? null : year;
+  };
+
+  const analyzeRadarAdas = (vehicleData: any, calcInputStr: string, invoiceInputStr: string) => {
+    if (!vehicleData) return null;
+    const year = getVehicleYear(vehicleData.datum_eerste_toelating);
+    const catalogPrice = vehicleData.catalogusprijs ? parseFloat(vehicleData.catalogusprijs) : 0;
+    const brand = (vehicleData.merk || "").toUpperCase();
+    const model = (vehicleData.handelsbenaming || "").toUpperCase();
+    
+    // ADAS Radar equipment heuristic based on physical stats & EU legislation
+    let hasRadar: 'Ja' | 'Nee' | 'Mogelijk' = 'Nee';
+    let confidence: 'hoog' | 'gemiddeld' | 'laag' = 'hoog';
+    let reasons: string[] = [];
+    let sensors: string[] = [];
+
+    if (year) {
+      if (year >= 2022) {
+        // Emergency braking (AEBS) which uses radar typically is standard on all EU vehicles from 2022
+        hasRadar = 'Ja';
+        confidence = 'hoog';
+        reasons.push("Noodremsystemen (AEB) zijn sinds juli 2022 wettelijk verplicht voor alle nieuwe typegoedkeuringen in de EU.");
+        sensors.push("Front-radar (afstandssensor achter voorbumper/grille/embleem)");
+        sensors.push("Multifunctionele camera (achter voorruit bij binnenspiegel)");
+      } else if (year >= 2018) {
+        hasRadar = 'Ja';
+        confidence = 'hoog';
+        reasons.push(`Gezien het bouwjaar (${year}) is dit model vrijwel gegarandeerd uitgerust met actieve rij-assistentie (ADAS).`);
+        sensors.push("Front-radar (afstandssensor)");
+        sensors.push("Multifunctionele voorruit-camera");
+      } else if (year >= 2014) {
+        // 2014-2017: premium brands or expensive cars usually had radar
+        const premiumBrands = ["AUDI", "BMW", "MERCEDES-BENZ", "VOLVO", "TESLA", "LEXUS", "LAND ROVER", "JAGUAR", "PORSCHE", "VOLKSWAGEN"];
+        const isPremium = premiumBrands.some(pb => brand.includes(pb));
+        
+        if (isPremium) {
+          hasRadar = 'Ja';
+          confidence = 'gemiddeld';
+          reasons.push(`Premium merk of model (${capitalizeWords(brand)}) met bouwjaar ${year}. Uitrusting met cruise-control radar of noodremsysteem (ACC/AEB) is zeer aannemelijk.`);
+          sensors.push("Distronic / ACC Front Radar");
+          sensors.push("Lane Assist Camera");
+        } else if (catalogPrice > 28000) {
+          hasRadar = 'Mogelijk';
+          confidence = 'gemiddeld';
+          reasons.push(`Hogere catalogusprijs (${formatCurrency(catalogPrice.toString())}) voor bouwjaar ${year}. Mogelijk geleverd met optionele radar.`);
+          sensors.push("Mogelijk adaptief radarsysteem");
+        } else {
+          hasRadar = 'Nee';
+          confidence = 'gemiddeld';
+          reasons.push(`Voor dit bouwjaar (${year}) en deze prijsklasse is een radar-noodremsysteem hoogst uitzonderlijk of niet aanwezig.`);
+        }
+      } else {
+        // Before 2014: Only luxury cruise-control radars (ACC)
+        const ultraLuxury = catalogPrice > 65000 || brand === "TESLA";
+        if (ultraLuxury) {
+          hasRadar = 'Mogelijk';
+          confidence = 'laag';
+          reasons.push(`Exclusief segment / hoge catalogusprijs (${formatCurrency(catalogPrice.toString())}) van vóór 2014. Mogelijk optionele Active Cruise Control (ACC) radar.`);
+          sensors.push("Vroege generatie ACC Radar (optioneel)");
+        } else {
+          hasRadar = 'Nee';
+          confidence = 'hoog';
+          reasons.push(`Bouwjaar (${year}) ligt vóór de grootschalige marktintroductie van ADAS/AEB in dit segment.`);
+        }
+      }
+    } else {
+      hasRadar = 'Mogelijk';
+      confidence = 'laag';
+      reasons.push("Geen bouwjaar bekend uit de RDW-database om de uitrusting te bepalen.");
+    }
+
+    // Cross-reference with Estimate or Invoice lines (searching keywords)
+    const fullText = `${calcInputStr} ${invoiceInputStr}`.toLowerCase();
+    
+    // Checks for bumper-area bodywork and ADAS-calibration/radars
+    const hasBumperWork = ["bumper", "grille", "rooster", "front", "embleem", "logo", "scherm v", "voorzijde"].some(w => fullText.includes(w));
+    const hasCalibration = ["kalibrat", "calibrat", "uitlijn", "afstel", "inleer", "camera af", "aiming", "sensor binden", "adas"].some(w => fullText.includes(w));
+    const hasRadarPart = ["radar", "acc s", "afstandssensor", "afstand sensor", "afstandsradar", "distronic"].some(w => fullText.includes(w));
+
+    let alertType: 'warning' | 'info' | 'success' | null = null;
+    let alertTitle = "";
+    let alertMessage = "";
+
+    if (hasRadar === 'Ja' || (hasRadar === 'Mogelijk' && hasRadarPart)) {
+      if (hasBumperWork && !hasCalibration) {
+        alertType = 'warning';
+        alertTitle = "Mogelijk Ontbrekende ADAS Kalibratie!";
+        alertMessage = `Dit voertuig ${capitalizeWords(brand)} heeft een radarsysteem en er is schadeherstel aan de voorzijde gedocumenteerd. Er is echter geen post voor ADAS/radar-kalibratie of sensorafstelling opgenomen op de inkoopfactuur of calculatie. Herkalibratie is essentieel voor de verkeersveiligheid.`;
+      } else if (hasBumperWork && hasCalibration) {
+        alertType = 'success';
+        alertTitle = "ADAS Kalibratie Geverifieerd";
+        alertMessage = `Uitstekend. De noodzakelijke radar- of ADAS-kalibratie na frontwerkzaamheden is correct opgenomen op de inkoopfactuur of calculatie.`;
+      }
+    } else if (hasRadar === 'Nee') {
+      if (hasRadarPart || fullText.includes("radar kalib") || fullText.includes("kalibreren radar") || fullText.includes("acc kalib") || fullText.includes("adas kalib")) {
+        alertType = 'warning';
+        alertTitle = "Verdachte ADAS Waarschuwing";
+        alertMessage = `Er is een radar-kalibratie of radarsensor berekend op de documenten, maar dit voertuig (${capitalizeWords(brand)} uit ${year || 'onbekend'}) is volgens de fabrieksspecificaties niet uitgerust met een ADAS-radar. Controleer op onterechte kostendeclaratie.`;
+      }
+    }
+
+    return {
+      hasRadar,
+      confidence,
+      reasons,
+      sensors,
+      alert: alertType ? { type: alertType, title: alertTitle, message: alertMessage } : null
+    };
   };
 
   // Fetch prices for selected client
@@ -820,6 +967,13 @@ export default function App() {
     doc.text(`Verificatie Verslag - Datum: ${dateStr} ${timeStr}`, 14, 28);
     if (licensePlate) doc.text(`Kenteken: ${licensePlate.toUpperCase()}`, 14, 33);
     if (caseNumber) doc.text(`Dossiernummer: ${caseNumber}`, 14, 38);
+    if (kmStand) doc.text(`Kilometerstand: ${parseInt(kmStand.replace(/\D/g, '')).toLocaleString('nl-NL')} km`, 120, 33);
+    if (vehicleData) {
+      const estimatedValue = calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand);
+      if (estimatedValue) {
+        doc.text(`Geschatte Dagwaarde: EUR ${estimatedValue.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 120, 38);
+      }
+    }
     
     doc.setFont("helvetica", "bold");
     doc.text("Ontwikkeld door: Danny Radjkoemar", 120, 20);
@@ -1597,6 +1751,55 @@ export default function App() {
               />
             </div>
 
+          {/* RDW ADAS / Radar Intelli-Audit Alerts */}
+          {(() => {
+            const audit = analyzeRadarAdas(vehicleData, calcInput, invoiceInput);
+            if (!audit || !audit.alert) return null;
+            
+            const { type, title, message } = audit.alert;
+            return (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`p-5 rounded-3xl border text-left flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4 ${
+                  type === 'warning' 
+                    ? 'bg-rose-50 border-rose-100 text-rose-800' 
+                    : 'bg-emerald-50 border-emerald-100 text-emerald-800'
+                }`}
+              >
+                <div className="flex items-start gap-3 flex-1">
+                  <div className={`p-2.5 rounded-2xl shrink-0 ${
+                    type === 'warning' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
+                  }`}>
+                    {type === 'warning' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black tracking-tight flex items-center gap-2">
+                      <span>{title}</span>
+                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                        type === 'warning' ? 'bg-rose-200 text-rose-800' : 'bg-emerald-200 text-emerald-850'
+                      }`}>ADAS Audit</span>
+                    </h4>
+                    <p className="text-xs font-medium mt-1 leading-relaxed opacity-95">{message}</p>
+                  </div>
+                </div>
+                {/* Action button */}
+                <div className="shrink-0 w-full md:w-auto text-right self-center">
+                  <button
+                    onClick={() => setShowRdwModal(true)}
+                    className={`text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl border transition-all active:scale-95 whitespace-nowrap ${
+                      type === 'warning' 
+                        ? 'bg-rose-100/60 hover:bg-rose-200 text-rose-800 border-rose-200' 
+                        : 'bg-emerald-100/60 hover:bg-emerald-200 text-emerald-850 border-emerald-200'
+                    }`}
+                  >
+                    Bekijk Radar Status
+                  </button>
+                </div>
+              </motion.div>
+            );
+          })()}
+
             {/* Report Section */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100 space-y-4">
@@ -2055,8 +2258,157 @@ export default function App() {
                       </div>
                     </div>
 
+                    {/* Kilometerstand Input Card */}
+                    <div className="bg-slate-50 border border-slate-250/60 p-5 rounded-3xl text-left flex flex-col md:flex-row items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 w-full md:w-auto">
+                        <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center text-blue-600 shrink-0">
+                          <Gauge size={20} />
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="text-sm font-bold text-slate-800">Kilometerstand Verificatie</h4>
+                          <p className="text-[11px] text-slate-500 font-medium">Beïnvloedt de actuele dagwaarde direct op basis van gebruik.</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto shrink-0">
+                        {/* KM Input */}
+                        <div className="relative">
+                          <input 
+                            type="text"
+                            placeholder="Bijv. 120.000"
+                            value={kmStand ? parseInt(kmStand.replace(/\D/g, '')).toLocaleString('nl-NL') : ""}
+                            onChange={(e) => {
+                              const rawVal = e.target.value.replace(/\D/g, '');
+                              setKmStand(rawVal);
+                            }}
+                            className="w-full sm:w-48 bg-white border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl py-2 pl-4 pr-12 text-slate-800 font-bold text-sm focus:outline-none transition-all placeholder:text-slate-400"
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">KM</span>
+                        </div>
+                        
+                        {/* Dynamic status helper */}
+                        <div className="text-xs font-medium text-slate-600 flex items-center justify-center min-h-[36px] bg-white border border-slate-100 shadow-sm px-4 rounded-xl">
+                          {(() => {
+                            const years = (() => {
+                              const datum = vehicleData.datum_eerste_toelating;
+                              if (datum && datum.length === 8) {
+                                const year = parseInt(datum.substring(0, 4));
+                                const month = parseInt(datum.substring(4, 6)) - 1;
+                                const day = parseInt(datum.substring(6, 8));
+                                const admissionDate = new Date(year, month, day);
+                                const today = new Date();
+                                return Math.max(0.1, Math.abs(today.getTime() - admissionDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+                              }
+                              return 1;
+                            })();
+                            const expected = Math.round(years * 15000);
+                            const current = kmStand ? parseInt(kmStand.replace(/\D/g, '')) : 0;
+                            
+                            if (!kmStand || isNaN(current) || current <= 0) {
+                              return (
+                                <span className="text-slate-400 italic">Verwacht gem.: {expected.toLocaleString('nl-NL')} km</span>
+                              );
+                            }
+                            
+                            const diff = current - expected;
+                            if (diff > 5000) {
+                              return (
+                                <span className="text-rose-600 font-bold flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                                  <span>+{Math.abs(diff).toLocaleString('nl-NL')} km t.o.v. gem.</span>
+                                </span>
+                              );
+                            } else if (diff < -5000) {
+                              return (
+                                <span className="text-emerald-600 font-bold flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span>-{Math.abs(diff).toLocaleString('nl-NL')} km t.o.v. gem.</span>
+                                </span>
+                              );
+                            } else {
+                              return (
+                                <span className="text-blue-600 font-bold flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                  <span>Conform landelijk gemiddelde</span>
+                                </span>
+                              );
+                            }
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RDW ADAS & Radar Sensor Analyse Card */}
+                    {(() => {
+                      const audit = analyzeRadarAdas(vehicleData, calcInput, invoiceInput);
+                      if (!audit) return null;
+                      return (
+                        <div className="bg-slate-50 border border-slate-200/60 p-5 rounded-3xl text-left space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 shrink-0">
+                                <CarFront size={20} className="text-indigo-500 animate-pulse" />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-black text-slate-800">ADAS & Radarsensoren Analyse (RDW)</h4>
+                                <p className="text-[11px] text-slate-500 font-medium">Bepaald op basis van bouwjaar, merkklasse, catalogusprijs en EU criteria.</p>
+                              </div>
+                            </div>
+
+                            {/* Badge */}
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[11px] font-black uppercase px-3 py-1 rounded-full ${
+                                audit.hasRadar === 'Ja' 
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                  : audit.hasRadar === 'Mogelijk'
+                                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                  : 'bg-slate-200 text-slate-600 border border-slate-305'
+                              }`}>
+                                Front Radar: {audit.hasRadar}
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 capitalize">
+                                ({audit.confidence} betrouwbaarheid)
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                            <div className="space-y-2">
+                              <p className="font-bold text-slate-700">Heuristische Analyse Criteria:</p>
+                              <ul className="list-disc list-inside space-y-1.5 text-slate-500 font-medium pl-1">
+                                {audit.reasons.map((r, idx) => (
+                                  <li key={idx} className="leading-relaxed">{r}</li>
+                                ))}
+                              </ul>
+                            </div>
+
+                            <div className="space-y-2 bg-white p-3.5 rounded-2xl border border-slate-150">
+                              <p className="font-bold text-slate-705 flex items-center gap-1.5">
+                                <ShieldCheck size={14} className="text-indigo-600 animate-bounce" />
+                                <span>Verwachte Beveiligingscamera & Sensoren:</span>
+                              </p>
+                              {audit.sensors.length > 0 ? (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {audit.sensors.map((s, idx) => (
+                                    <span key={idx} className="bg-indigo-50/50 border border-indigo-100 text-indigo-700 font-bold px-2 py-1 rounded-lg text-[10px]">
+                                      {s}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-slate-400 italic font-medium">Geen premium ADAS sensoren verwacht op basis van voertuigleeftijd.</p>
+                              )}
+                              <p className="text-[10px] text-slate-400 pt-1 leading-normal font-medium">
+                                *Let op: Voorbumper herstellingen aan auto's met radarsystemen vereisen ALTIJD kalibratie.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Highly prominent 'Geschatte Dagwaarde' banner */}
-                    {calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating) && (
+                    {calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand) && (
                       <motion.div 
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -2074,9 +2426,9 @@ export default function App() {
                         </div>
                         <div className="text-right relative z-10">
                           <span className="text-3xl md:text-4xl font-black tracking-tight text-white drop-shadow-sm select-all">
-                            {formatCurrency(calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating)?.toString())}
+                            {formatCurrency(calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand)?.toString())}
                           </span>
-                          <p className="text-[9px] text-emerald-100 font-bold mt-1 uppercase tracking-wider opacity-90">Berekend op basis van degressieve afschrijving & leeftijd</p>
+                          <p className="text-[9px] text-emerald-100 font-bold mt-1 uppercase tracking-wider opacity-90">Berekend op basis van degressieve afschrijving, leeftijd & kilometerstand</p>
                         </div>
                       </motion.div>
                     )}
@@ -2128,15 +2480,15 @@ export default function App() {
                         <div className="space-y-2.5">
                           <DetailRow label="Catalogusprijs" value={formatCurrency(vehicleData.catalogusprijs)} valueColor="text-emerald-600 font-black" />
                           <DetailRow label="Bruto BPM" value={formatCurrency(vehicleData.bruto_bpm)} valueColor="text-blue-600 font-black" />
-                          {calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating) && (
+                          {calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand) && (
                             <div className="mt-2.5 pt-2.5 border-t border-dashed border-slate-200 bg-slate-100/60 p-2 rounded-xl">
                               <div className="flex items-center justify-between text-xs">
                                 <span className="font-bold text-slate-500 flex items-center gap-1">
                                   <span>Geschatte Dagwaarde</span>
-                                  <span className="bg-blue-105 text-blue-700 font-black text-[8px] px-1 py-0.5 rounded uppercase" title="Berekend op basis van degressieve afschrijving & leeftijd">INFORMATIEF</span>
+                                  <span className="bg-blue-105 text-blue-700 font-black text-[8px] px-1 py-0.5 rounded uppercase" title="Berekend op basis van degressieve afschrijving, leeftijd & kilometerstand">INFORMATIEF</span>
                                 </span>
                                 <span className="font-black text-slate-900">
-                                  {formatCurrency(calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating)?.toString())}
+                                  {formatCurrency(calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand)?.toString())}
                                 </span>
                               </div>
                             </div>
