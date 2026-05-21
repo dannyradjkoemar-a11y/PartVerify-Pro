@@ -2727,12 +2727,22 @@ export default function App() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-800 text-white font-bold text-sm px-5 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+            className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-800 text-white font-bold text-sm px-5 py-4 rounded-2xl shadow-2xl flex items-start gap-3 max-w-xl whitespace-pre-wrap"
           >
-            <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
+            <div className="w-6 h-6 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0 mt-0.5">
               <CheckCircle2 size={14} className="text-white" />
             </div>
-            <span>{toastMsg}</span>
+            <div className="flex-1 pr-2 leading-relaxed">
+              {toastMsg}
+            </div>
+            <button 
+              onClick={() => setToastMsg(null)}
+              className="text-slate-400 hover:text-white transition-colors p-1 hover:bg-slate-800 rounded-lg shrink-0 -mt-1 -mr-1"
+              id="close-toast-btn"
+              title="Sluiten"
+            >
+              <X size={16} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
