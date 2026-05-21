@@ -125,7 +125,6 @@ export default function App() {
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [lastExtractedText, setLastExtractedText] = useState("");
 
   // Set session persistence so closing tab / browser logs out user
   useEffect(() => {
@@ -146,138 +145,39 @@ export default function App() {
     }
   }, []);
 
-  // Smart Automatic Metadata Extractor and Input Purger for Audatex Calculations
+  // Smart Chassisnummer (VIN) Extractor from Invoice or Calculation pasted texts
   useEffect(() => {
-    if (!calcInput) return;
+    if (chassisNumber) return; // Do not overwrite if already set or manually edited
     
-    // Check if the pasted text is a full Audatex calculation report
-    const textToParse = calcInput.trim();
-    if (textToParse.length < 200) return;
-    
-    const normalized = textToParse.replace(/\s+/g, '').toUpperCase();
-    const isFullReport = normalized.includes("ONDERDELEN") && (normalized.includes("AUDATEX") || normalized.includes("SCHADENUMMER") || normalized.includes("REPARATIEKOSTEN"));
-    
-    if (!isFullReport) return;
+    const combinedText = `${calcInput} ${invoiceInput}`;
+    if (!combinedText.trim()) return;
 
-    let extractedPlate = "";
-    let extractedVin = "";
-    let extractedKm = "";
-
-    // 1. Parse LICENSE PLATE (Kenteken)
-    const platePatterns = [
-      /k\s*e\s*n\s*t\s*e\s*k\s*e\s*n\s*[\s*:\-=]+\s*([A-Z0-9-]{6,12})/i, // KENTEKEN: HTS-99-K
-      /k\s*e\s*n\s*t\s*\.\s*([A-Z0-9-]{6,12})/i, // KENT.   HTS-99-K
-      /license\s*plate\s*[\s*:\-=]+\s*([A-Z0-9-]{6,12})/i,
-      /kenteken\s+([A-Z0-9-]{6,12})/i,
-    ];
-    for (const pattern of platePatterns) {
-      const match = textToParse.match(pattern);
-      if (match && match[1]) {
-        const candidate = match[1].replace(/[^a-zA-Z0-9-]/g, '').toUpperCase();
-        if (candidate.length >= 6 && candidate.length <= 12) {
-          extractedPlate = candidate;
-          break;
-        }
-      }
-    }
-
-    // 2. Parse CHASSISNUMMER (VIN)
+    // RegEx patterns tailored for Dutch & English invoices/calculations
+    // Matches labels like "Chassisnummer:", "Chassisnr:", "VIN:", "fgstnr:", "Identificatienummer:" etc.
     const vinPatterns = [
-      /(?:chassisnr|chassisnummer|identificatienummer|vin|fgstnr|fahrgestellnummer|chassis\s*no|fzg-ident-nr|vtg\.-id\.-nr\.)[\s*:\-=]+([A-HJ-NPR-Z0-9]{17})\b/i,
-      /\b([A-HJ-NPR-Z0-9]{17})\b/i
+      /(?:chassisnr|chassisnummer|identificatienummer|vin|fgstnr|fahrgestellnummer|chassis\s*no|fzg-ident-nr)[\s*:\-=]+([A-HJ-NPR-Z0-9]{17})/i,
+      /\b([A-HJ-NPR-Z0-9]{17})\b/i // Fallback to any valid 17-digit ISO VIN on a boundary
     ];
+
     for (const pattern of vinPatterns) {
-      const match = textToParse.match(pattern);
+      const match = combinedText.match(pattern);
       if (match && match[1]) {
-        const candidate = match[1].toUpperCase();
-        const hasDigits = /[0-9]/.test(candidate);
-        const hasLetters = /[A-Z]/.test(candidate);
-        const isRepetitive = /^(.)\1+$/.test(candidate);
+        const foundVin = match[1].toUpperCase();
+        
+        // Strict validation: must contain both letters and digits, and not repetitive static blocks
+        const hasDigits = /[0-9]/.test(foundVin);
+        const hasLetters = /[A-Z]/.test(foundVin);
+        const isRepetitive = /^(.)\1+$/.test(foundVin);
+
         if (hasDigits && hasLetters && !isRepetitive) {
-          extractedVin = candidate;
+          setChassisNumber(foundVin);
+          setToastMsg(`Chassisnummer ${foundVin} automatisch herkend en ingevuld!`);
+          setTimeout(() => setToastMsg(null), 3000);
           break;
         }
       }
     }
-
-    // 3. Parse KILOMETERSTAND (KM-stand)
-    const kmPatterns = [
-      /kilometerstand\s*:\s*([\d\s\.]+)\s*(?:km|KM)?/i,
-      /kilometerstand\s+([\d\s\.]+)\s*(?:km|KM)?/i,
-      /km-stand\s*:\s*([\d\s\.]+)/i,
-      /km\s*stand\s*:\s*([\d\s\.]+)/i,
-      /\b(\d{3,6})\s*[kK][mM]\b/i
-    ];
-    for (const pattern of kmPatterns) {
-      const match = textToParse.match(pattern);
-      if (match && match[1]) {
-        const digits = match[1].replace(/\D/g, '');
-        if (digits && digits.length >= 2 && digits.length <= 7) {
-          extractedKm = digits;
-          break;
-        }
-      }
-    }
-
-    // 4. Extract only the actual Parts lines
-    const lines = textToParse.split('\n');
-    const cleanPartsLines: string[] = [];
-    let inPartsSection = false;
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const normLine = line.replace(/\s+/g, '').toUpperCase();
-      
-      // Look for the start of the O N D E R D E L E N block
-      if (normLine.includes("ONDERDELEN") && !normLine.includes("TOTAALBEDRAG") && !normLine.includes("SAMENVATTING")) {
-        inPartsSection = true;
-        continue;
-      }
-
-      // Look for the end of the O N D E R D E L E N block
-      if (inPartsSection && (normLine.includes("ARBEIDSLOON") || normLine.includes("EINDCALCULATIE"))) {
-        inPartsSection = false;
-        continue;
-      }
-
-      if (inPartsSection) {
-        const trimmed = line.trim();
-        // Keep lines inside O N D E R D E L E N that start with a 4-digit code (standard Audatex format)
-        const isPartLine = /^\d{4}\s+/.test(trimmed) && /[\d\.,\s+\*]+$/.test(trimmed);
-        if (isPartLine && !trimmed.includes("CODE-NR") && !trimmed.includes("BENAMING")) {
-          cleanPartsLines.push(trimmed);
-        }
-      }
-    }
-
-    const updates: string[] = [];
-    if (extractedPlate && extractedPlate !== licensePlate) {
-      setLicensePlate(extractedPlate);
-      updates.push(`Kenteken: ${extractedPlate}`);
-    }
-    if (extractedVin && extractedVin !== chassisNumber) {
-      setChassisNumber(extractedVin);
-      updates.push(`Chassisnummer: ${extractedVin}`);
-    }
-    if (extractedKm && extractedKm !== kmStand) {
-      setKmStand(extractedKm);
-      updates.push(`KM-stand: ${parseInt(extractedKm, 10).toLocaleString("nl-NL")} km`);
-    }
-
-    const cleanPartsText = cleanPartsLines.join('\n');
-    
-    // Check if we successfully isolated part lines
-    if (cleanPartsText && cleanPartsText !== calcInput) {
-      setCalcInput(cleanPartsText);
-      updates.push(`Onderdelen opgeschoond (${cleanPartsLines.length} stuks)`);
-    }
-
-    if (updates.length > 0) {
-      setToastMsg(`Calculatiedata ingeladen:\n${updates.join(", ")}`);
-      const timer = setTimeout(() => setToastMsg(null), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [calcInput, licensePlate, chassisNumber, kmStand]);
+  }, [calcInput, invoiceInput, chassisNumber]);
 
   const saveCurrentDossier = () => {
     if (!licensePlate && !caseNumber) {
