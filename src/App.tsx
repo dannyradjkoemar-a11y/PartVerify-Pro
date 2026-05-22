@@ -1677,24 +1677,24 @@ export default function App() {
           <>
             {/* Top Bar: Dossier Info */}
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-              <div className="flex-1 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-5">
-                <div className="flex-1">
+              <div className="flex-1 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                <div className="col-span-1 md:col-span-5 lg:col-span-6">
                   <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Kenteken</label>
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
                     {/* Dutch styled license plate input - Upgraded for premium readability & visual rest */}
-                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-md h-16 flex-1 max-w-[320px] transition-all hover:shadow-lg focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-md h-20 flex-1 max-w-[380px] transition-all hover:shadow-lg focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
                       {/* EU/NL banner - Optimized for height & crisp typography */}
-                      <div className="bg-[#0039AE] text-white text-[9px] w-9 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15">
-                        <span className="text-[11px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
-                        <span className="text-[12px] font-sans font-black tracking-normal leading-none select-none">NL</span>
+                      <div className="bg-[#0039AE] text-white text-[10px] w-12 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15">
+                        <span className="text-[13px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                        <span className="text-[14px] font-sans font-black tracking-normal leading-none select-none">NL</span>
                       </div>
                       
-                      {/* Input - Large 2XL soothing high-legibility font with clean letter spacing */}
+                      {/* Input - Large 3XL soothing high-legibility font with clean letter spacing */}
                       <input 
                         type="text"
                         placeholder="AB-123-C"
                         maxLength={11}
-                        className="w-full bg-transparent text-center text-2xl font-black font-mono placeholder:text-slate-900/25 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-3 selection:bg-slate-900/20"
+                        className="w-full bg-transparent text-center text-3xl md:text-4xl font-black font-mono placeholder:text-slate-900/25 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-3 selection:bg-slate-900/20"
                         value={licensePlate}
                         onChange={(e) => setLicensePlate(e.target.value)}
                       />
@@ -1705,10 +1705,10 @@ export default function App() {
                         onClick={() => {
                           if (vehicleData) {
                             setShowRdwModal(true);
-                          }
+                           }
                         }}
                         disabled={vehicleLoading}
-                        className={`px-3 py-1.5 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                        className={`px-4 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
                           vehicleData 
                             ? 'bg-yellow-300 text-slate-950 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
                             : vehicleLoading 
@@ -1717,36 +1717,45 @@ export default function App() {
                         }`}
                         title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
                       >
-                        <CarFront size={13} className={vehicleLoading ? "animate-spin text-blue-550" : "text-current"} />
+                        <CarFront size={14} className={vehicleLoading ? "animate-spin text-blue-550" : "text-current"} />
                         <span>{vehicleLoading ? 'Laden...' : 'RDW'}</span>
                       </button>
                     )}
                   </div>
                 </div>
-                <div className="w-px h-10 bg-slate-100 mx-2 hidden md:block" />
-                <div className="flex-[1.5]">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Dossiernummer</label>
+
+                <div className="hidden md:block w-px h-12 bg-slate-100 justify-self-center col-span-1" />
+
+                <div className="col-span-1 md:col-span-3">
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Dossiernummer</label>
                   <input 
                     type="text"
-                    placeholder="Invoeren dossiernummer..."
-                    className="w-full bg-transparent text-lg font-black text-slate-800 focus:outline-none placeholder:text-slate-200"
+                    placeholder="Invoeren..."
+                    className="w-full bg-slate-50 border border-slate-100 px-4 py-3.5 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all placeholder:text-slate-300"
                     value={caseNumber}
                     onChange={(e) => setCaseNumber(e.target.value)}
                   />
                 </div>
-                <div className="w-px h-10 bg-slate-100 mx-2 hidden md:block" />
-                <div className="flex-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Opdrachtgever</label>
-                  <select 
-                    value={selectedClientId}
-                    onChange={(e) => setSelectedClientId(e.target.value)}
-                    className="w-full bg-transparent text-sm font-bold text-slate-800 focus:outline-none appearance-none cursor-pointer"
-                  >
-                    <option value="">Geen / Standaard</option>
-                    {clients.map(c => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
-                  </select>
+
+                <div className="hidden lg:block w-px h-12 bg-slate-100 justify-self-center col-span-1" />
+
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Opdrachtgever</label>
+                  <div className="relative">
+                    <select 
+                      value={selectedClientId}
+                      onChange={(e) => setSelectedClientId(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 px-4 py-3.5 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all appearance-none cursor-pointer pr-10"
+                    >
+                      <option value="">Geen / Standaard</option>
+                      {clients.map(c => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-slate-400">
+                      <Layers size={14} />
+                    </div>
+                  </div>
                 </div>
               </div>
 
