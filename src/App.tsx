@@ -35,7 +35,8 @@ import {
   Gauge,
   Fingerprint,
   Settings,
-  HelpCircle
+  HelpCircle,
+  QrCode
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -109,6 +110,7 @@ export default function App() {
 
   const [tfaSecret, setTfaSecret] = useState<string | null>(null);
   const [isTfaEnabled, setIsTfaEnabled] = useState<boolean>(false);
+  const [showAuthQrCode, setShowAuthQrCode] = useState<boolean>(false);
 
   const [manualOverrides, setManualOverrides] = useState<Record<string, number>>({});
   const [editingCell, setEditingCell] = useState<string | null>(null);
@@ -1488,6 +1490,43 @@ export default function App() {
                 >
                   Terug naar inloggen
                 </button>
+
+                <div className="pt-3 border-t border-white/5 space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthQrCode(!showAuthQrCode)}
+                    className="w-full text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer py-1"
+                  >
+                    <QrCode className="w-4 h-4 shrink-0" />
+                    {showAuthQrCode ? "Verberg Authenticator QR-Sleutel" : "Authenticator nog niet gekoppeld? Toon QR & sleutel"}
+                  </button>
+
+                  {showAuthQrCode && tfaSecret && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-white/5 border border-white/10 rounded-2xl p-4 text-slate-300 text-[11px] space-y-3 leading-relaxed text-left"
+                    >
+                      <p className="font-semibold text-white">Scanner / Handmatige Setup:</p>
+                      <p>Koppel direct door deze QR-code te scannen met uw Microsoft, Google of een andere Authenticator app:</p>
+
+                      <div className="bg-white p-3 rounded-xl flex justify-center w-[136px] mx-auto shadow-md">
+                        <QRCodeCanvas 
+                          value={`otpauth://totp/PartVerify%20Pro:${encodeURIComponent(user?.email || "User")}?secret=${tfaSecret}&issuer=PartVerify%20Pro`}
+                          size={112}
+                          bgColor="#ffffff"
+                          fgColor="#090d16"
+                          level="M"
+                        />
+                      </div>
+
+                      <p className="text-[10px] text-slate-400">Of voeg de geheime sleutel handmatig toe:</p>
+                      <div className="bg-black/30 p-2.5 rounded-lg border border-white/5 font-mono text-[11px] break-all select-all text-blue-400 text-center select-all font-bold tracking-wide">
+                        {tfaSecret}
+                      </div>
+                    </motion.div>
+                  )}
+                </div>
               </motion.form>
             )}
           </AnimatePresence>

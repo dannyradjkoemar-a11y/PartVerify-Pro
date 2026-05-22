@@ -14,7 +14,9 @@ import {
   Check, 
   Sparkles,
   Key,
-  DollarSign
+  DollarSign,
+  QrCode,
+  Copy
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
@@ -30,6 +32,8 @@ import {
   query
 } from "firebase/firestore";
 import { getAuth, sendPasswordResetEmail } from "firebase/auth";
+import * as OTPAuth from "otpauth";
+import { QRCodeCanvas } from "qrcode.react";
 
 interface BackdoorPanelProps {
   isOpen: boolean;
@@ -52,6 +56,7 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [newMail, setNewMail] = useState("");
   const [newRole, setNewRole] = useState("user");
+  const [activeTfaUser, setActiveTfaUser] = useState<any | null>(null);
 
   // Tab 3: Pridings
   const [clients, setClients] = useState<any[]>([]);
@@ -162,6 +167,57 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
     } catch (err: any) {
       onToast(`Fout bij verwijderen gebruiker: ${err.message}`);
     }
+  };
+
+  const handleGenerateUserTfaSecret = async (userId: string, email: string) => {
+    try {
+      const secret = new OTPAuth.Secret().base32;
+      await updateDoc(doc(db, "users", userId), {
+        tfaSecret: secret,
+        tfaEnabled: true
+      });
+      onToast(`Nieuwe 2FA-code sleutel succesvol gegenereerd voor ${email}!`);
+      
+      // Update local state if this is the active user
+      if (activeTfaUser && activeTfaUser.id === userId) {
+        setActiveTfaUser((prev: any) => ({
+          ...prev,
+          tfaSecret: secret,
+          tfaEnabled: true
+        }));
+      }
+      loadAllBackdoorData();
+    } catch (err: any) {
+      onToast(`Fout bij genereren 2FA sleutel: ${err.message}`);
+    }
+  };
+
+  const handleRemoveUserTfaSecret = async (userId: string, email: string) => {
+    if (!window.confirm(`Weet u zeker dat u de 2FA sleutel wilt verwijderen voor ${email}?`)) return;
+    try {
+      await updateDoc(doc(db, "users", userId), {
+        tfaSecret: null,
+        tfaEnabled: false
+      });
+      onToast(`2FA sleutel succesvol gewist voor ${email}.`);
+      
+      // Update local state if this is the active user
+      if (activeTfaUser && activeTfaUser.id === userId) {
+        setActiveTfaUser((prev: any) => ({
+          ...prev,
+          tfaSecret: null,
+          tfaEnabled: false
+        }));
+      }
+      loadAllBackdoorData();
+    } catch (err: any) {
+      onToast(`Fout bij wissen 2FA sleutel: ${err.message}`);
+    }
+  };
+
+  const handleCopyText = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    onToast(`${label} gekopieerd naar klembord!`);
   };
 
   const handleCreateUserDirect = async () => {
@@ -441,6 +497,16 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
                               </select>
                             </td>
                             <td className="p-4 text-right flex items-center justify-end gap-2">
+                              {/* QR Code / 2FA Management */}
+                              <button
+                                onClick={() => setActiveTfaUser(u)}
+                                className="px-2.5 py-1.5 text-slate-300 hover:text-emerald-400 bg-slate-900 border border-slate-800 hover:border-emerald-900/30 rounded-lg transition-all font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5"
+                                title="Bekijk of genereer de Authenticator QR-code voor deze gebruiker"
+                              >
+                                <QrCode size={11} className="text-emerald-500" />
+                                2FA QR Sleutel
+                              </button>
+
                               {/* Trigger password reset link */}
                               <button
                                 onClick={() => handleSendResetEmail(u.email)}
@@ -527,6 +593,136 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
                     <RefreshCw size={12} className="opacity-70" />
                   </a>
                 </div>
+
+                {/* 2FA Manager Modal Overlay */}
+                <AnimatePresence>
+                  {activeTfaUser && (
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 text-left"
+                      onClick={() => setActiveTfaUser(null)}
+                    >
+                      <motion.div 
+                        initial={{ scale: 0.95, y: 15 }}
+                        animate={{ scale: 1, y: 0 }}
+                        exit={{ scale: 0.95, y: 15 }}
+                        className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl shadow-black/80 relative text-left"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Header */}
+                        <div className="flex items-center justify-between border-b border-slate-850 pb-3">
+                          <div className="flex items-center gap-2">
+                            <QrCode className="text-emerald-500 w-5 h-5 animate-pulse" />
+                            <div>
+                              <h3 className="text-xs font-black text-white uppercase tracking-wider">2FA Authenticator QR</h3>
+                              <p className="text-[10px] text-slate-400 font-medium font-sans">Configureer handmatig voor deze gebruiker</p>
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => setActiveTfaUser(null)}
+                            className="p-1.5 rounded-lg bg-slate-950 text-slate-400 hover:text-white border border-slate-800 transition-all cursor-pointer"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        {/* User details */}
+                        <div className="text-xs space-y-1">
+                          <span className="text-slate-500 block uppercase font-bold text-[9px] tracking-widest pl-0.5">Gebruiker E-mail</span>
+                          <span className="text-purple-300 font-mono font-black text-sm">{activeTfaUser.email}</span>
+                        </div>
+
+                        {/* State & QR Section */}
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-850 space-y-4">
+                          {activeTfaUser.tfaSecret ? (
+                            <div className="space-y-4 text-center">
+                              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[10px] font-black uppercase tracking-wider mx-auto">
+                                <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                                Actieve 2FA Sleutel Geconfigureerd
+                              </div>
+
+                              {/* Canvas Box */}
+                              <div className="bg-white p-3.5 rounded-2xl flex flex-col items-center justify-center w-[148px] h-[148px] mx-auto shadow-md">
+                                <QRCodeCanvas 
+                                  value={`otpauth://totp/PartVerify%20Pro:${encodeURIComponent(activeTfaUser.email || "User")}?secret=${activeTfaUser.tfaSecret}&issuer=PartVerify%20Pro`}
+                                  size={120}
+                                  bgColor="#ffffff"
+                                  fgColor="#090d16"
+                                  level="Q"
+                                />
+                              </div>
+
+                              <p className="text-[10px] text-slate-400 leading-relaxed max-w-xs mx-auto font-sans">
+                                Laat het personeelslid deze QR-code scannen met hun Microsoft of Google Authenticator app om direct in te loggen.
+                              </p>
+
+                              {/* Clipboard text helper */}
+                              <div className="space-y-1 text-left">
+                                <label className="text-[9px] text-slate-450 block font-bold uppercase tracking-widest pl-1">Handmatige Sleutel</label>
+                                <div className="flex items-center gap-2">
+                                  <input 
+                                    type="text" 
+                                    readOnly 
+                                    value={activeTfaUser.tfaSecret}
+                                    className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 h-10 text-xs font-mono text-center text-blue-400 font-bold outline-none select-all"
+                                  />
+                                  <button
+                                    onClick={() => handleCopyText(activeTfaUser.tfaSecret, "Geheime 2FA Sleutel")}
+                                    className="p-2.5 bg-slate-900 hover:bg-slate-850 border border-slate-800 rounded-xl text-slate-350 hover:text-white transition-all shrink-0 cursor-pointer"
+                                    title="Kopieer Sleutel"
+                                  >
+                                    <Copy size={13} />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center py-4 space-y-3">
+                              <div className="w-12 h-12 bg-amber-500/10 text-amber-500 rounded-full flex items-center justify-center mx-auto border border-amber-500/25">
+                                <Lock size={20} />
+                              </div>
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-300">Geen actieve 2FA sleutel gevonden</h4>
+                                <p className="text-[10px] text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed font-sans">
+                                  Voor deze gebruiker is momenteel geen actieve 2FA sleutel ingesteld. U kunt er meteen een genereren.
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex flex-col gap-2 pt-1 border-t border-slate-850 font-sans">
+                          <button
+                            onClick={() => handleGenerateUserTfaSecret(activeTfaUser.id, activeTfaUser.email)}
+                            className="w-full h-11 text-xs font-bold bg-purple-600 hover:bg-purple-500 border border-purple-500/10 text-white rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-lg shadow-purple-950/20 cursor-pointer"
+                          >
+                            <Sparkles size={13} />
+                            {activeTfaUser.tfaSecret ? "Regenereer & Overschrijf Sleutel" : "Genereer direct 2FA Sleutel"}
+                          </button>
+
+                          {activeTfaUser.tfaSecret && (
+                            <button
+                              onClick={() => handleRemoveUserTfaSecret(activeTfaUser.id, activeTfaUser.email)}
+                              className="w-full h-11 text-xs font-bold bg-transparent hover:bg-rose-950/20 border border-slate-800 hover:border-rose-900/30 text-slate-400 hover:text-rose-450 rounded-xl transition-all cursor-pointer"
+                            >
+                              Schakel 2FA uit / Wis sleutel
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => setActiveTfaUser(null)}
+                            className="w-full h-11 text-xs font-bold bg-slate-950 hover:bg-slate-850 border border-slate-800 text-slate-350 hover:text-white rounded-xl transition-all cursor-pointer"
+                          >
+                            Sluit Beheer
+                          </button>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
               </div>
             )}
