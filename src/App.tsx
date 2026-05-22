@@ -34,7 +34,8 @@ import {
   History,
   Gauge,
   Fingerprint,
-  Settings
+  Settings,
+  HelpCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -49,6 +50,7 @@ import {
   descriptionsMatch 
 } from "./utils";
 import { BackdoorPanel } from "./components/BackdoorPanel";
+import { ManualModal } from "./components/ManualModal";
 
 import { initializeApp } from "firebase/app";
 import { 
@@ -129,6 +131,7 @@ export default function App() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [lastExtractedText, setLastExtractedText] = useState("");
   const [isBackdoorOpen, setIsBackdoorOpen] = useState(false);
+  const [isManualOpen, setIsManualOpen] = useState(false);
   const [logoClickCount, setLogoClickCount] = useState(0);
 
   // Set session persistence so closing tab / browser logs out user
@@ -372,9 +375,39 @@ export default function App() {
       if (u) {
         setUser(u);
         try {
-          const userDoc = await getDoc(doc(db, "users", u.uid));
+          let userDoc = await getDoc(doc(db, "users", u.uid));
+          let profile = null;
+
           if (userDoc.exists()) {
-            const profile = userDoc.data();
+            profile = userDoc.data();
+          } else {
+            // Check in memory if any user document has u.email
+            const lowerEmail = u.email?.toLowerCase();
+            const userSnap = await getDocs(collection(db, "users"));
+            const foundDoc = userSnap.docs.find(d => d.data().email?.toLowerCase() === lowerEmail);
+            if (foundDoc) {
+              const matchedData = foundDoc.data();
+              profile = {
+                email: u.email,
+                role: matchedData.role || "user",
+                tfaEnabled: matchedData.tfaEnabled || false,
+                tfaSecret: matchedData.tfaSecret || null,
+                createdAt: matchedData.createdAt || serverTimestamp()
+              };
+              // Save to u.uid so future gets and security rules work perfectly!
+              await setDoc(doc(db, "users", u.uid), profile);
+              // Safely delete old random-id doc if it's different and not u.uid
+              if (foundDoc.id !== u.uid) {
+                try {
+                  await deleteDoc(doc(db, "users", foundDoc.id));
+                } catch (delErr) {
+                  console.error("Old user doc deletion failed", delErr);
+                }
+              }
+            }
+          }
+
+          if (profile) {
             const lowerEmail = u.email?.toLowerCase();
             const isAdminEmail = lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com";
             
@@ -428,8 +461,22 @@ export default function App() {
                 await signOut(auth);
               }
             } else {
-              await signOut(auth);
-              alert("Toegang geweigerd. Neem contact op met de beheerder.");
+              // Automatically initialize as user since "iedereen die wordt toegevoegd automatisch user is"
+              const initialProfile = {
+                email: u.email,
+                role: "user",
+                tfaEnabled: false,
+                createdAt: serverTimestamp()
+              };
+              try {
+                await setDoc(doc(db, "users", u.uid), initialProfile);
+                setUserProfile(initialProfile);
+                setIsAuthorized(true);
+              } catch (setErr) {
+                handleFirestoreError(setErr, 'write', `users/${u.uid}`);
+                await signOut(auth);
+                alert("Toegang geweigerd. Neem contact op met de beheerder.");
+              }
             }
           }
         } catch (err) {
@@ -1506,6 +1553,14 @@ export default function App() {
               </button>
             )}
             <button 
+              onClick={() => setIsManualOpen(true)}
+              className="px-3.5 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 hover:border-blue-250 rounded-lg flex items-center gap-2 transition-all font-bold text-xs"
+              title="Handleiding"
+            >
+              <HelpCircle size={16} />
+              Handleiding
+            </button>
+            <button 
               onClick={handleLogout}
               className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 rounded-lg flex items-center gap-2 transition-all font-bold text-xs"
               title="Uitloggen"
@@ -1522,24 +1577,24 @@ export default function App() {
           <>
             {/* Top Bar: Dossier Info */}
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-              <div className="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
+              <div className="flex-1 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-5">
                 <div className="flex-1">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
-                  <div className="flex items-center justify-between gap-3">
-                    {/* Dutch styled license plate input */}
-                    <div className="relative flex items-center bg-[#FFD600] text-slate-950 font-mono font-black border-2 border-slate-950 rounded-xl overflow-hidden shadow-md h-12 flex-1 max-w-[260px] transition-all focus-within:ring-2 focus-within:ring-blue-500/20">
-                      {/* EU/NL banner */}
-                      <div className="bg-[#0039AE] text-white text-[7px] px-2 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r border-slate-950/20">
-                        <span className="text-[8px] text-[#FFD600] font-sans leading-none mb-1">★★</span>
-                        <span className="text-[9px] font-sans font-black tracking-tighter leading-none">NL</span>
+                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Kenteken</label>
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Dutch styled license plate input - Upgraded for premium readability & visual rest */}
+                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-md h-16 flex-1 max-w-[320px] transition-all hover:shadow-lg focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+                      {/* EU/NL banner - Optimized for height & crisp typography */}
+                      <div className="bg-[#0039AE] text-white text-[9px] w-9 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15">
+                        <span className="text-[11px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                        <span className="text-[12px] font-sans font-black tracking-normal leading-none select-none">NL</span>
                       </div>
                       
-                      {/* Input */}
+                      {/* Input - Large 2XL soothing high-legibility font with clean letter spacing */}
                       <input 
                         type="text"
                         placeholder="AB-123-C"
                         maxLength={11}
-                        className="w-full bg-transparent text-center text-base font-black font-mono placeholder:text-slate-950/25 text-slate-950 focus:outline-none uppercase tracking-widest px-2"
+                        className="w-full bg-transparent text-center text-2xl font-black font-mono placeholder:text-slate-900/25 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-3 selection:bg-slate-900/20"
                         value={licensePlate}
                         onChange={(e) => setLicensePlate(e.target.value)}
                       />
@@ -2785,6 +2840,15 @@ export default function App() {
               setToastMsg(msg);
               setTimeout(() => setToastMsg(null), 5000);
             }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isManualOpen && (
+          <ManualModal 
+            isOpen={isManualOpen}
+            onClose={() => setIsManualOpen(false)}
           />
         )}
       </AnimatePresence>

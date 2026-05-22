@@ -116,14 +116,54 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
     onToast("Systeemconfiguratie direct opgeslagen in local cache & cloud!");
   };
 
-  const handleUpdateUserRole = async (userId: string, currentRole: string) => {
-    const targetRole = currentRole === "admin" ? "user" : "admin";
+  const handleUpdateUserRole = async (userId: string, targetRole: string) => {
     try {
       await updateDoc(doc(db, "users", userId), { role: targetRole });
       onToast(`Gebruiker rol veranderd naar ${targetRole}!`);
       loadAllBackdoorData();
     } catch (err: any) {
       onToast(`Fout bij updaten gebruiker: ${err.message}`);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm("Weet u zeker dat u deze gebruiker wilt verwijderen?")) return;
+    try {
+      await deleteDoc(doc(db, "users", userId));
+      onToast("Gebruiker verwijderd uit Firestore database.");
+      loadAllBackdoorData();
+    } catch (err: any) {
+      onToast(`Fout bij verwijderen gebruiker: ${err.message}`);
+    }
+  };
+
+  const handleCreateUserDirect = async () => {
+    const cleanedEmail = newMail.trim().toLowerCase();
+    if (!cleanedEmail) {
+      onToast("Voer a.u.b. een bekend e-mailadres in.");
+      return;
+    }
+    try {
+      // First check if user already exists in local list
+      const userExists = users.some(u => u.email?.toLowerCase() === cleanedEmail);
+      if (userExists) {
+        onToast("Deze gebruiker staat al in de database!");
+        return;
+      }
+
+      await addDoc(collection(db, "users"), {
+        email: cleanedEmail,
+        role: newRole || "user",
+        tfaEnabled: false,
+        createdAt: serverTimestamp()
+      });
+
+      onToast(`Gebruiker ${cleanedEmail} succesvol aangemaakt als ${newRole || "user"}!`);
+      setNewMail("");
+      setNewRole("user");
+      loadAllBackdoorData();
+    } catch (err: any) {
+      onToast(`Fout bij aanmaken gebruiker: ${err.message}`);
     }
   };
 
@@ -333,34 +373,115 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
                         <th className="p-4">E-mailadres</th>
                         <th className="p-4">Huidige Rol</th>
                         <th className="p-4">2FA Verplicht</th>
-                        <th className="p-4 text-right">Rol Aanpassen</th>
+                        <th className="p-4 text-center">Rol Toewijzen</th>
+                        <th className="p-4 text-right">Beheer</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 text-xs">
-                      {users.map((u) => (
-                        <tr key={u.id} className="hover:bg-slate-900/40">
-                          <td className="p-4 font-mono font-bold text-purple-300">{u.email}</td>
-                          <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase tracking-wider ${u.role === 'admin' ? 'bg-amber-600/10 text-amber-500 border border-amber-500/20' : 'bg-slate-800 text-slate-400'}`}>
-                              {u.role}
-                            </span>
-                          </td>
-                          <td className="p-4 font-bold text-slate-300">
-                            {u.tfaEnabled ? "Ja (Verplicht)" : "Nee"}
-                          </td>
-                          <td className="p-4 text-right">
-                            <button 
-                              onClick={() => handleUpdateUserRole(u.id, u.role)}
-                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 hover:text-white rounded-lg transition-colors font-bold text-[10px] uppercase tracking-wide text-slate-300"
-                            >
-                              Toggle admin
-                            </button>
-                          </td>
+                      {users.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-slate-500 italic">Geen gebruikers gevonden.</td>
                         </tr>
-                      ))}
+                      ) : (
+                        users.map((u) => (
+                          <tr key={u.id} className="hover:bg-slate-900/40">
+                            <td className="p-4 font-mono font-bold text-purple-300">{u.email}</td>
+                            <td className="p-4">
+                              <span className={`px-2 py-0.5 rounded-md font-bold text-[9px] uppercase tracking-wider ${u.role === 'admin' ? 'bg-amber-600/10 text-amber-500 border border-amber-500/20' : 'bg-slate-800 text-slate-400'}`}>
+                                {u.role || "user"}
+                              </span>
+                            </td>
+                            <td className="p-4 font-bold text-slate-300">
+                              {u.tfaEnabled ? "Ja (Verplicht)" : "Nee"}
+                            </td>
+                            <td className="p-4 text-center">
+                              <select
+                                value={u.role || "user"}
+                                onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
+                                className="bg-slate-900 border border-slate-750 text-white rounded-lg px-2 py-1 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-purple-500"
+                              >
+                                <option value="user">user (Standaard)</option>
+                                <option value="admin">admin</option>
+                              </select>
+                            </td>
+                            <td className="p-4 text-right">
+                              <button 
+                                onClick={() => handleDeleteUser(u.id)}
+                                className="p-2 text-slate-400 hover:text-rose-500 rounded bg-slate-900 border border-slate-800/80 hover:border-rose-950 transition-all font-bold text-[10px] uppercase tracking-wide"
+                                title="Verwijder Gebruiker"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Form to directly add a new user to Firestore list */}
+                <div className="bg-slate-950 p-6 rounded-3xl border border-slate-850 space-y-4">
+                  <h3 className="text-xs font-black uppercase text-purple-400 tracking-wider">Direct Nieuwe Gebruiker Aanmaken (Firestore)</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Nieuwe accounts worden automatisch als <span className="font-bold text-slate-200">user</span> ingesteld. Voer het e-mailadres in om de database-inrichting direct te regelen:
+                  </p>
+                  
+                  <div className="flex flex-col sm:flex-row gap-4 items-end">
+                    <div className="flex-1 space-y-2">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider pl-1">E-mailadres</label>
+                      <input 
+                        type="email"
+                        placeholder="naam@outlook.com of @gmail.com"
+                        value={newMail}
+                        onChange={(e) => setNewMail(e.target.value)}
+                        className="w-full h-11 bg-slate-900 border border-slate-850 focus:border-purple-600/50 text-xs rounded-xl px-4 outline-none text-white focus:ring-2 focus:ring-purple-500/10 placeholder:text-slate-650 transition-all font-medium"
+                      />
+                    </div>
+
+                    <div className="w-full sm:w-48 space-y-2">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider pl-1">Rol Toewijzen</label>
+                      <select 
+                        value={newRole}
+                        onChange={(e) => setNewRole(e.target.value)}
+                        className="w-full h-11 bg-slate-900 border border-slate-850 text-xs rounded-xl px-3 font-bold text-white focus:outline-none"
+                      >
+                        <option value="user">user (Standaard)</option>
+                        <option value="admin">admin</option>
+                      </select>
+                    </div>
+
+                    <button
+                      onClick={handleCreateUserDirect}
+                      className="h-11 px-6 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-2 shrink-0 transition-colors shadow-lg shadow-purple-950"
+                    >
+                      <Plus size={14} />
+                      Gebruiker Opslaan
+                    </button>
+                  </div>
+                </div>
+
+                {/* Direct Link to Firebase Console */}
+                <div className="bg-gradient-to-r from-slate-950 to-indigo-950/60 p-5 rounded-3xl border border-slate-850 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <h4 className="text-xs font-black text-amber-500 uppercase tracking-wider">Link naar Firebase Console</h4>
+                    <p className="text-[11px] text-slate-400">
+                      Om de login-inloggegevens (wachtwoorden) van gebruikers aan te maken of te resetten, dient u naar de Firebase Console te gaan.
+                    </p>
+                  </div>
+                  
+                  <a 
+                    href="https://console.firebase.google.com/" 
+                    target="_blank" 
+                    rel="noreferrer noopener"
+                    className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 text-slate-950 text-xs font-black tracking-wide uppercase rounded-xl transition-all shadow-md shrink-0 flex items-center gap-1.5"
+                    id="lnk-firebase-console"
+                  >
+                    Open Firebase Console
+                    <RefreshCw size={12} className="opacity-70" />
+                  </a>
+                </div>
+
               </div>
             )}
 
