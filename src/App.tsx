@@ -467,14 +467,25 @@ export default function App() {
                 await signOut(auth);
               }
             } else {
-              // For security: they are not pre-approved and not a default admin. Delete auth account and deny access.
+              // Automatically initialize as user since "iedereen die wordt toegevoegd automatisch user is"
+              const initialProfile = {
+                email: u.email,
+                role: "user",
+                tfaEnabled: false,
+                tfaSecret: null,
+                createdAt: serverTimestamp()
+              };
               try {
-                await u.delete();
-              } catch (userDelErr) {
-                console.error("Failed to delete unauthorized Firebase Auth user:", userDelErr);
+                await setDoc(doc(db, "users", u.uid), initialProfile);
+                setUserProfile(initialProfile);
+                setIsTfaEnabled(false);
+                setTfaSecret(null);
+                setIsAuthorized(true);
+              } catch (setErr) {
+                handleFirestoreError(setErr, 'write', `users/${u.uid}`);
+                await signOut(auth);
+                alert("Er is een fout opgetreden bij het registreren van uw profiel.");
               }
-              await signOut(auth);
-              alert("Toegang geweigerd. Uw e-mailadres is niet bekend in het systeem.");
             }
           }
         } catch (err) {
