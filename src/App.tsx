@@ -794,9 +794,22 @@ export default function App() {
       try {
         await signInWithEmailAndPassword(auth, cleanEmail, password);
       } catch (authError: any) {
-        // If it's the admin email or owner, try to create the account if login fails
+        // If it's the admin email, owner, or any user pre-registered in the Firestore collection,
+        // try to create the account if login fails with user-not-found/invalid-credentials
         const lowerEmail = cleanEmail.toLowerCase();
-        if ((authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential' || authError.code === 'auth/invalid-login-credentials') && (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com")) {
+        const isDefaultAdmin = lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com";
+        let isPreApproved = isDefaultAdmin;
+
+        if (!isPreApproved) {
+          try {
+            const userSnap = await getDocs(collection(db, "users"));
+            isPreApproved = userSnap.docs.some(d => d.data().email?.toLowerCase() === lowerEmail);
+          } catch (dbErr) {
+            console.error("Failed checking pre-approved user state", dbErr);
+          }
+        }
+
+        if ((authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential' || authError.code === 'auth/invalid-login-credentials') && isPreApproved) {
           try {
             await createUserWithEmailAndPassword(auth, cleanEmail, password);
           } catch (createError: any) {
