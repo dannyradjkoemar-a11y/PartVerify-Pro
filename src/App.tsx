@@ -36,7 +36,8 @@ import {
   Fingerprint,
   Settings,
   HelpCircle,
-  QrCode
+  QrCode,
+  Strikethrough
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -103,6 +104,7 @@ export default function App() {
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [struckThroughIds, setStruckThroughIds] = useState<Set<string>>(new Set());
+  const [redPriceStruckThroughIds, setRedPriceStruckThroughIds] = useState<Set<string>>(new Set());
 
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
@@ -310,6 +312,7 @@ export default function App() {
       manualParts,
       removedPartIds: Array.from(removedPartIds),
       struckThroughIds: Array.from(struckThroughIds),
+      redPriceStruckThroughIds: Array.from(redPriceStruckThroughIds),
       stats,
       savedAt: new Date().toISOString()
     };
@@ -341,6 +344,7 @@ export default function App() {
     setManualParts(dossier.manualParts || []);
     setRemovedPartIds(new Set(dossier.removedPartIds || []));
     setStruckThroughIds(new Set(dossier.struckThroughIds || []));
+    setRedPriceStruckThroughIds(new Set(dossier.redPriceStruckThroughIds || []));
 
     setToastMsg(`Dossier "${dossier.caseNumber !== "Onbekend" ? dossier.caseNumber : dossier.licensePlate}" geladen!`);
     setTimeout(() => setToastMsg(null), 3000);
@@ -1103,11 +1107,36 @@ export default function App() {
     setEditingCell(null);
     setRemovedPartIds(new Set());
     setStruckThroughIds(new Set());
+    setRedPriceStruckThroughIds(new Set());
     setManualParts([]);
     setLicensePlate("");
     setCaseNumber("");
     setKmStand("");
     setChassisNumber("");
+  };
+
+  const toggleRedPriceStrikethrough = (id: string) => {
+    setRedPriceStruckThroughIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllRedPriceStrikethrough = () => {
+    const visibleIds = filteredResults.map(res => res.calc.id);
+    const allChecked = visibleIds.every(id => redPriceStruckThroughIds.has(id));
+    
+    setRedPriceStruckThroughIds(prev => {
+      const next = new Set(prev);
+      if (allChecked) {
+        visibleIds.forEach(id => next.delete(id));
+      } else {
+        visibleIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
   };
 
   const toggleStrikethrough = (id: string) => {
@@ -1296,6 +1325,28 @@ export default function App() {
             } else if (item.priceDiff < 0) {
               data.cell.styles.textColor = [16, 185, 129]; // Emerald (saving details)
             }
+          }
+        }
+      },
+      didDrawCell: (data) => {
+        const item = visibleInPdf[data.row.index];
+        if (!item) return;
+
+        if (data.section === 'body') {
+          if (data.column.index === 4 && item.status === 'deviation') {
+            const tempDrawColor = doc.getDrawColor(); 
+            const tempLineWidth = doc.getLineWidth();
+
+            doc.setDrawColor(225, 29, 72); // Rose-600 red
+            doc.setLineWidth(1.2);
+            
+            const xLeft = data.cell.x + 2;
+            const xRight = data.cell.x + data.cell.width - 2;
+            const yCenter = data.cell.y + (data.cell.height / 2);
+            doc.line(xLeft, yCenter, xRight, yCenter);
+
+            doc.setDrawColor(tempDrawColor);
+            doc.setLineWidth(tempLineWidth);
           }
         }
       }
@@ -1839,168 +1890,214 @@ export default function App() {
               </div>
             )}
 
-            {/* OPTION 3: Visuele Kosten Breakdown (Volledige breedte) */}
-            <div className="w-full bg-white rounded-3xl border border-slate-200 shadow-sm p-6 flex flex-col space-y-6">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <Activity size={18} className="text-blue-600 animate-pulse" />
-                  <h3 className="text-base font-bold tracking-tight text-slate-800">Visuele Kosten & Besparings Analyse</h3>
+            {/* OPTION 3: Visuele Kosten Breakdown (Volledige breedte) - Terminal hacker theme */}
+            <div className="w-full bg-slate-950 rounded-3xl border border-slate-800 shadow-[0_4px_30px_rgba(0,0,0,0.4)] p-6 flex flex-col space-y-6 font-mono relative overflow-hidden">
+              {/* Scanline grid texture overlay for visual depth */}
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0)_95%,rgba(0,190,255,0.015)_95%)] bg-[size:100%_24px] pointer-events-none" />
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3 relative z-10">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-2.5 w-2.5 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
+                  </span>
+                  <div className="flex flex-col text-left">
+                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest font-mono">[PV-PRO_TELEM_V2.6]</span>
+                    <h3 className="text-sm font-black tracking-tight text-slate-100 uppercase">Visuele Kosten & Besparings Analyse</h3>
+                  </div>
                 </div>
-                <span className="text-[10px] font-black text-rose-500 bg-rose-50/50 border border-rose-100 px-2.5 py-0.5 rounded-full animate-pulse uppercase tracking-wider">
-                  Calculatie vs Factuur
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] text-cyan-400 bg-cyan-950/50 border border-cyan-800/50 px-2.5 py-1 rounded-md animate-pulse uppercase tracking-wider font-extrabold shadow-[0_0_10px_rgba(34,211,238,0.1)]">
+                    RECONCILER: ACTIVE
+                  </span>
+                </div>
               </div>
 
-                {results.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 text-left">
-                    {/* Progress representation */}
-                    <div className="space-y-5">
-                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Kostenvergelijker</h4>
-                      
-                      <div className="space-y-4">
-                        {/* Calculations sum bar */}
-                        <div>
-                          <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
-                            <span>Berekende onderdelen (Calculatie):</span>
-                            <span className="font-black text-slate-800">
-                              € {results.reduce((sum, r) => sum + r.calc.price, 0).toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="h-3.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 shadow-inner">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ width: "100%" }}
-                              transition={{ duration: 0.8 }}
-                              className="h-full bg-slate-450 rounded-full"
-                              style={{ backgroundColor: '#94a3b8' }}
-                            />
-                          </div>
+              {results.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 text-left relative z-10">
+                  {/* Progress representation */}
+                  <div className="space-y-5">
+                    <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                      <span className="text-cyan-500 font-bold text-xs">&gt;_</span>
+                      <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">FINANCIAL_CORE_METRICS</h4>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {/* Calculations sum bar */}
+                      <div>
+                        <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                          <span>[SYS_CALC_REF] Berekende onderdelen:</span>
+                          <span className="font-extrabold text-slate-200">
+                            € {results.reduce((sum, r) => sum + r.calc.price, 0).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                          </span>
                         </div>
-
-                        {/* Verified Actual Price */}
-                        <div>
-                          <div className="flex justify-between text-xs font-bold text-slate-600 mb-1.5">
-                            <span>Werkelijk goedgekeurd bedrag (Factuur/Prijsafspraak):</span>
-                            <span className="font-extrabold text-blue-600">
-                              € {stats.totalVerifiedAmount.toFixed(2)}
-                            </span>
-                          </div>
-                          <div className="h-3.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50 shadow-inner">
-                            <motion.div 
-                              initial={{ width: 0 }}
-                              animate={{ 
-                                width: `${Math.min(100, (stats.totalVerifiedAmount / Math.max(1, results.reduce((sum, r) => sum + r.calc.price, 0))) * 100)}%` 
-                              }}
-                              transition={{ duration: 0.8, delay: 0.2 }}
-                              className="h-full bg-blue-600 rounded-full shadow-inner"
-                            />
-                          </div>
+                        <div className="h-5 bg-slate-900 border border-slate-800/80 rounded px-1 flex items-center shadow-inner relative overflow-hidden">
+                          <div className="absolute right-2 text-[8px] text-slate-600 font-bold tracking-widest uppercase z-10">[M_TARGET_BASE]</div>
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 0.8 }}
+                            className="h-2.5 rounded-sm bg-slate-800 border-r border-slate-700 shadow-[0_0_8px_rgba(100,116,139,0.2)]"
+                          />
                         </div>
                       </div>
 
-                      {/* Visual Difference Ring or Box */}
-                      <div className={`p-4 rounded-2xl border flex items-center justify-between transition-all ${
-                        stats.totalPriceDiff <= 0 
-                          ? 'bg-emerald-50 border-emerald-100 text-emerald-800' 
-                          : 'bg-amber-50 border-amber-100 text-amber-800'
-                      }`}>
-                        <div className="space-y-0.5">
-                          <h5 className="text-sm font-black uppercase tracking-tight">
-                            {stats.totalPriceDiff <= 0 ? 'Totale Kostenbesparing ✓' : 'Kostenstijging / Verschil ⚠'}
-                          </h5>
-                          <p className="text-[11px] font-medium opacity-80">
-                            {stats.totalPriceDiff <= 0 
-                              ? 'Dit dossier toont een positief resultaat voor de factuur.' 
-                              : 'Dit dossier vereist beheerderstoestemming vanwege hogere facturatie.'}
+                      {/* Verified Actual Price */}
+                      <div>
+                        <div className="flex justify-between text-xs text-slate-400 mb-1.5">
+                          <span>[SYS_ACTUAL_MATCH] Goedgekeurde som:</span>
+                          <span className="font-extrabold text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.15)]">
+                            € {stats.totalVerifiedAmount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        {(() => {
+                          const percentage = Math.min(100, (stats.totalVerifiedAmount / Math.max(1, results.reduce((sum, r) => sum + r.calc.price, 0))) * 100);
+                          return (
+                            <div className="h-5 bg-slate-900 border border-slate-800/80 rounded px-1 flex items-center shadow-inner relative overflow-hidden">
+                              <div className="absolute right-2 text-[8px] text-cyan-400 font-black tracking-widest uppercase z-10">{percentage.toFixed(1)}% RATIO</div>
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${percentage}%` }}
+                                transition={{ duration: 0.8, delay: 0.2 }}
+                                className="h-2.5 rounded-sm bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.45)] border-r border-cyan-400"
+                              />
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* Visual Difference Ring or Box */}
+                    {stats.totalPriceDiff <= 0 ? (
+                      <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 flex items-center justify-between transition-all shadow-[inset_0_0_15px_rgba(16,185,129,0.05),0_0_15px_rgba(16,185,129,0.05)]">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            <h5 className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                              SYS_STATUS: IN_BUDGET ✓
+                            </h5>
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-relaxed font-bold">
+                            Dossier met succes reconciled. Kostenbesparing gedetecteerd.
                           </p>
                         </div>
-                        <span className="text-xl font-black whitespace-nowrap">
-                          € {Math.abs(stats.totalPriceDiff).toFixed(2)}
+                        <div className="text-right pl-4">
+                          <div className="text-[9px] text-slate-500 font-semibold tracking-widest">DELTA_GAIN</div>
+                          <span className="text-lg font-black tracking-tight text-emerald-400 select-all">
+                            -€ {Math.abs(stats.totalPriceDiff).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 text-rose-400 flex items-center justify-between transition-all shadow-[inset_0_0_15px_rgba(244,63,94,0.05),0_0_15px_rgba(244,63,94,0.05)]">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
+                            <h5 className="text-[10px] font-black uppercase tracking-wider text-rose-400">
+                              SYS_STATUS: OVER_BUDGET ⚠
+                            </h5>
+                          </div>
+                          <p className="text-[10px] text-slate-400 leading-relaxed font-bold">
+                            Afwijkend bedrag gedetecteerd. Vereist beheerderstoestemming.
+                          </p>
+                        </div>
+                        <div className="text-right pl-4">
+                          <div className="text-[9px] text-slate-500 font-semibold tracking-widest">DELTA_LOSS</div>
+                          <span className="text-lg font-black tracking-tight text-rose-400 select-all">
+                            +€ {Math.abs(stats.totalPriceDiff).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Breakdown distribution percentages */}
+                  <div className="space-y-5 flex flex-col justify-between">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
+                        <span className="text-cyan-500 font-bold text-xs">&gt;_</span>
+                        <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">RULE_FLOW_DISTRIBUTION</h4>
+                      </div>
+                      
+                      <div className="flex h-6 rounded overflow-hidden border border-slate-850 shadow-inner bg-slate-900 p-[2px]">
+                        {stats.matched > 0 && (
+                          <div 
+                            style={{ width: `${(stats.matched / results.length) * 100}%` }} 
+                            className="bg-emerald-500/80 hover:bg-emerald-400 border border-emerald-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
+                            title={`Matched OK: ${stats.matched}`}
+                          >
+                            {Math.round((stats.matched / results.length) * 100)}%
+                          </div>
+                        )}
+                        {stats.approved > 0 && (
+                          <div 
+                            style={{ width: `${(stats.approved / results.length) * 100}%` }} 
+                            className="bg-amber-500/80 hover:bg-amber-400 border border-amber-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
+                            title={`Handmatig: ${stats.approved}`}
+                          >
+                            {Math.round((stats.approved / results.length) * 100)}%
+                          </div>
+                        )}
+                        {stats.deviations > 0 && (
+                          <div 
+                            style={{ width: `${(stats.deviations / results.length) * 100}%` }} 
+                            className="bg-rose-500/80 hover:bg-rose-400 border border-rose-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
+                            title={`Verschil: ${stats.deviations}`}
+                          >
+                            {Math.round((stats.deviations / results.length) * 100)}%
+                          </div>
+                        )}
+                        {stats.missing > 0 && (
+                          <div 
+                            style={{ width: `${(stats.missing / results.length) * 100}%` }} 
+                            className="bg-pink-500/80 hover:bg-pink-400 border border-pink-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
+                            title={`Ontbrekend: ${stats.missing}`}
+                          >
+                            {Math.round((stats.missing / results.length) * 100)}%
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900/40 rounded-xl p-4 border border-slate-850 flex-1 flex flex-col justify-center space-y-2 font-mono">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-400 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-sm bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
+                          MATCHED_OK
                         </span>
+                        <span className="font-extrabold text-slate-200">{stats.matched} regels</span>
                       </div>
-                    </div>
-
-                    {/* Breakdown distribution percentages */}
-                    <div className="space-y-5 flex flex-col justify-between">
-                      <div className="space-y-3">
-                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Regel distributie</h4>
-                        <div className="flex h-5 rounded-full overflow-hidden border border-slate-200 shadow-inner bg-slate-50">
-                          {stats.matched > 0 && (
-                            <div 
-                              style={{ width: `${(stats.matched / results.length) * 100}%` }} 
-                              className="bg-emerald-500 h-full text-center flex items-center justify-center text-[9px] text-white font-black"
-                              title={`Matched OK: ${stats.matched}`}
-                            >
-                              {Math.round((stats.matched / results.length) * 100)}%
-                            </div>
-                          )}
-                          {stats.approved > 0 && (
-                            <div 
-                              style={{ width: `${(stats.approved / results.length) * 100}%` }} 
-                              className="bg-amber-500 h-full text-center flex items-center justify-center text-[9px] text-white font-black"
-                              title={`Handmatig: ${stats.approved}`}
-                            >
-                              {Math.round((stats.approved / results.length) * 100)}%
-                            </div>
-                          )}
-                          {stats.deviations > 0 && (
-                            <div 
-                              style={{ width: `${(stats.deviations / results.length) * 100}%` }} 
-                              className="bg-rose-500 h-full text-center flex items-center justify-center text-[9px] text-white font-black"
-                              title={`Verschil: ${stats.deviations}`}
-                            >
-                              {Math.round((stats.deviations / results.length) * 100)}%
-                            </div>
-                          )}
-                          {stats.missing > 0 && (
-                            <div 
-                              style={{ width: `${(stats.missing / results.length) * 100}%`, backgroundColor: '#fda4af' }} 
-                              className="bg-rose-450 h-full text-center flex items-center justify-center text-[9px] text-white font-black"
-                              title={`Ontbrekend: ${stats.missing}`}
-                            >
-                              {Math.round((stats.missing / results.length) * 100)}%
-                            </div>
-                          )}
-                        </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-400 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-sm bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.5)]" />
+                          PRICE_MISMATCH
+                        </span>
+                        <span className="font-extrabold text-rose-400">{stats.deviations} regels</span>
                       </div>
-
-                      <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100 flex-1 flex flex-col justify-center space-y-2">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-500 flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                            Correct Gematcht
-                          </span>
-                          <span className="font-black text-slate-800">{stats.matched} regels</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-500 flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                            Prijsverschillen
-                          </span>
-                          <span className="font-black text-rose-600">{stats.deviations} regels</span>
-                        </div>
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-slate-500 flex items-center gap-1.5">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                            Handmatige aanpassingen
-                          </span>
-                          <span className="font-black text-amber-600">{stats.approved} regels</span>
-                        </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-400 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-sm bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
+                          MANUAL_OVERRIDES
+                        </span>
+                        <span className="font-extrabold text-amber-500">{stats.approved} regels</span>
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border-2 border-dashed border-slate-100 rounded-3xl text-slate-400 space-y-3">
-                    <div className="p-3 bg-slate-50 rounded-full text-slate-300">
-                      <Activity size={24} />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black uppercase text-slate-400 tracking-wider">Geen Actieve Analyse</h4>
-                      <p className="text-[11px] text-slate-400 mt-0.5">Vul calculatie- en inkoopgegevens in om grafieken te genereren.</p>
-                    </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border border-dashed border-slate-850 bg-slate-950/40 rounded-3xl text-slate-500 space-y-4 relative z-10">
+                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 animate-pulse">
+                    <Activity size={24} className="text-cyan-500" />
                   </div>
-                )}
-              </div>
+                  <div>
+                    <h4 className="text-xs font-black uppercase text-cyan-400 tracking-widest">[ANALYSIS_PORT_IDLE]</h4>
+                    <p className="text-[10px] text-slate-400 max-w-sm mx-auto leading-relaxed mt-1">
+                      Wachten op syntactische inputstream. Plak calculatie- en inkoopfactuurgegevens in de onderstaande buffers om de diagnostische telemetry-matrix te initialiseren.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Inputs - Stacked vertically for clarity as requested */}
             <div className="space-y-10">
@@ -2089,8 +2186,17 @@ export default function App() {
                   
                   <div className="flex flex-wrap items-center gap-2">
                     <button 
+                      onClick={toggleAllRedPriceStrikethrough}
+                      className="flex items-center gap-2 px-4 py-2 bg-rose-50 hover:bg-rose-100/80 text-rose-600 border border-rose-100 hover:border-rose-200 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer font-sans"
+                      title={filteredResults.length > 0 && filteredResults.every(res => redPriceStruckThroughIds.has(res.calc.id)) ? "Verwijder rood doorstrepen voor alle prijzen" : "Alle calculatieprijzen in één keer rood doorstrepen"}
+                    >
+                      <Strikethrough size={16} className="text-rose-500 shrink-0" />
+                      {filteredResults.length > 0 && filteredResults.every(res => redPriceStruckThroughIds.has(res.calc.id)) ? "Prijzen Herstellen" : "Prijzen Rood Doorstrepen"}
+                    </button>
+
+                    <button 
                       onClick={addManualPart}
-                      className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95"
+                      className="flex items-center gap-2 px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95 font-sans cursor-pointer"
                     >
                       <Plus size={16} />
                       Regel Toevoegen
@@ -2136,7 +2242,23 @@ export default function App() {
                       <th className="px-6 py-4 text-center">Pos.</th>
                       <th className="px-6 py-4">Onderdeel (Calculatie)</th>
                       <th className="px-6 py-4">Partnummer</th>
-                      <th className="px-6 py-4">Prijs Calc.</th>
+                      <th className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 justify-start">
+                          <span>Prijs Calc.</span>
+                          <button
+                            type="button"
+                            onClick={toggleAllRedPriceStrikethrough}
+                            className={`p-1 rounded transition-all cursor-pointer ${
+                              filteredResults.length > 0 && filteredResults.every(res => redPriceStruckThroughIds.has(res.calc.id))
+                                ? 'bg-rose-100 text-rose-600 border border-rose-200 shadow-sm'
+                                : 'bg-slate-100 hover:bg-rose-50 hover:text-rose-500 text-slate-400 border border-transparent'
+                            }`}
+                            title={filteredResults.length > 0 && filteredResults.every(res => redPriceStruckThroughIds.has(res.calc.id)) ? "Prijzen herstellen" : "Alle prijzen rood doorstrepen"}
+                          >
+                            <Strikethrough size={11} />
+                          </button>
+                        </div>
+                      </th>
                       <th className="px-6 py-4">Factuur Match / Prijs</th>
                       <th className="px-6 py-4">Verschil</th>
                       <th className="px-6 py-4 text-right">Acties</th>
@@ -2259,16 +2381,36 @@ export default function App() {
                                   />
                                 </div>
                               ) : (
-                                res.status === 'deviation' ? (
-                                  <div className="flex flex-col">
-                                    <span className="text-slate-400 line-through decoration-rose-500 decoration-2 text-sm">
+                                <div className="flex items-center gap-2 group/price-cell">
+                                  {res.status === 'deviation' ? (
+                                    <div className="flex flex-col">
+                                      <span className="text-slate-400 line-through decoration-rose-500 decoration-2 text-sm font-black">
+                                        € {res.calc.price.toFixed(2)}
+                                      </span>
+                                      <span className="text-[9px] text-rose-500 font-bold uppercase tracking-wider">AFWIJKING ({res.calc.price.toFixed(2)})</span>
+                                    </div>
+                                  ) : (
+                                    <span className={`text-base font-black transition-all ${
+                                      redPriceStruckThroughIds.has(res.calc.id)
+                                        ? 'text-slate-400 line-through decoration-rose-500 decoration-2 text-sm'
+                                        : 'text-slate-900 font-black'
+                                    }`}>
                                       € {res.calc.price.toFixed(2)}
                                     </span>
-                                    <span className="text-[9px] text-rose-500 font-bold uppercase tracking-wider">AFWIJKING ({res.calc.price.toFixed(2)})</span>
-                                  </div>
-                                ) : (
-                                  <>€ {res.calc.price.toFixed(2)}</>
-                                )
+                                  )}
+                                  
+                                  <button 
+                                    onClick={() => toggleRedPriceStrikethrough(res.calc.id)}
+                                    className={`p-1 rounded-lg border transition-all ${
+                                      redPriceStruckThroughIds.has(res.calc.id) 
+                                        ? 'bg-rose-50 border-rose-200 text-rose-600 opacity-100 shadow-sm' 
+                                        : 'bg-slate-50 border-slate-100 text-slate-300 hover:text-rose-500 hover:bg-rose-50 opacity-0 group-hover/price-cell:opacity-100 focus:opacity-100'
+                                    }`}
+                                    title={redPriceStruckThroughIds.has(res.calc.id) ? "Streep weghalen" : "Prijs rood doorstrepen"}
+                                  >
+                                    <Strikethrough size={13} />
+                                  </button>
+                                </div>
                               )}
                             </td>
                              <td className="px-6 py-4">
