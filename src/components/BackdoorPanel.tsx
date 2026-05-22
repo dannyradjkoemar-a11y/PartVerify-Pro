@@ -29,6 +29,7 @@ import {
   serverTimestamp,
   query
 } from "firebase/firestore";
+import { getAuth, sendPasswordResetEmail } from "firebase/auth";
 
 interface BackdoorPanelProps {
   isOpen: boolean;
@@ -123,6 +124,17 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
       loadAllBackdoorData();
     } catch (err: any) {
       onToast(`Fout bij updaten gebruiker: ${err.message}`);
+    }
+  };
+
+  const handleSendResetEmail = async (email: string) => {
+    if (!email) return;
+    try {
+      const auth = getAuth();
+      await sendPasswordResetEmail(auth, email);
+      onToast(`Wachtwoordherstellink is succesvol verzonden naar ${email}!`);
+    } catch (err: any) {
+      onToast(`Fout bij verzenden herstellink: ${err.message}`);
     }
   };
 
@@ -428,10 +440,20 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
                                 <option value="admin">admin</option>
                               </select>
                             </td>
-                            <td className="p-4 text-right">
+                            <td className="p-4 text-right flex items-center justify-end gap-2">
+                              {/* Trigger password reset link */}
+                              <button
+                                onClick={() => handleSendResetEmail(u.email)}
+                                className="px-2.5 py-1.5 text-slate-300 hover:text-amber-400 bg-slate-900 border border-slate-800 hover:border-amber-900/30 rounded-lg transition-all font-bold text-[10px] uppercase tracking-wide flex items-center gap-1.5"
+                                title="Stuur Wachtwoord Herstellink naar deze gebruiker"
+                              >
+                                <Key size={11} className="text-amber-500" />
+                                Reset Wachtwoord
+                              </button>
+
                               <button 
                                 onClick={() => handleDeleteUser(u.id)}
-                                className="p-2 text-slate-400 hover:text-rose-500 rounded bg-slate-900 border border-slate-800/80 hover:border-rose-950 transition-all font-bold text-[10px] uppercase tracking-wide"
+                                className="p-1.5 text-slate-400 hover:text-rose-500 rounded bg-slate-900 border border-slate-800/80 hover:border-rose-950 transition-all"
                                 title="Verwijder Gebruiker"
                               >
                                 <Trash2 size={13} />
