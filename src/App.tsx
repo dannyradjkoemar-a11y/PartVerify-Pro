@@ -73,6 +73,7 @@ import {
   collection, 
   addDoc, 
   query, 
+  where,
   getDocs,
   serverTimestamp,
   deleteDoc
@@ -381,27 +382,30 @@ export default function App() {
           if (userDoc.exists()) {
             profile = userDoc.data();
           } else {
-            // Check in memory if any user document has u.email
+            // Check via a secure filtered query if any user document has u.email
             const lowerEmail = u.email?.toLowerCase();
-            const userSnap = await getDocs(collection(db, "users"));
-            const foundDoc = userSnap.docs.find(d => d.data().email?.toLowerCase() === lowerEmail);
-            if (foundDoc) {
-              const matchedData = foundDoc.data();
-              profile = {
-                email: u.email,
-                role: matchedData.role || "user",
-                tfaEnabled: matchedData.tfaEnabled || false,
-                tfaSecret: matchedData.tfaSecret || null,
-                createdAt: matchedData.createdAt || serverTimestamp()
-              };
-              // Save to u.uid so future gets and security rules work perfectly!
-              await setDoc(doc(db, "users", u.uid), profile);
-              // Safely delete old random-id doc if it's different and not u.uid
-              if (foundDoc.id !== u.uid) {
-                try {
-                  await deleteDoc(doc(db, "users", foundDoc.id));
-                } catch (delErr) {
-                  console.error("Old user doc deletion failed", delErr);
+            if (lowerEmail) {
+              const q = query(collection(db, "users"), where("email", "==", lowerEmail));
+              const userSnap = await getDocs(q);
+              const foundDoc = userSnap.docs[0];
+              if (foundDoc) {
+                const matchedData = foundDoc.data();
+                profile = {
+                  email: u.email,
+                  role: matchedData.role || "user",
+                  tfaEnabled: matchedData.tfaEnabled || false,
+                  tfaSecret: matchedData.tfaSecret || null,
+                  createdAt: matchedData.createdAt || serverTimestamp()
+                };
+                // Save to u.uid so future gets and security rules work perfectly!
+                await setDoc(doc(db, "users", u.uid), profile);
+                // Safely delete old random-id doc if it's different and not u.uid
+                if (foundDoc.id !== u.uid) {
+                  try {
+                    await deleteDoc(doc(db, "users", foundDoc.id));
+                  } catch (delErr) {
+                    console.error("Old user doc deletion failed", delErr);
+                  }
                 }
               }
             }
@@ -461,22 +465,14 @@ export default function App() {
                 await signOut(auth);
               }
             } else {
-              // Automatically initialize as user since "iedereen die wordt toegevoegd automatisch user is"
-              const initialProfile = {
-                email: u.email,
-                role: "user",
-                tfaEnabled: false,
-                createdAt: serverTimestamp()
-              };
+              // For security: they are not pre-approved and not a default admin. Delete auth account and deny access.
               try {
-                await setDoc(doc(db, "users", u.uid), initialProfile);
-                setUserProfile(initialProfile);
-                setIsAuthorized(true);
-              } catch (setErr) {
-                handleFirestoreError(setErr, 'write', `users/${u.uid}`);
-                await signOut(auth);
-                alert("Toegang geweigerd. Neem contact op met de beheerder.");
+                await u.delete();
+              } catch (userDelErr) {
+                console.error("Failed to delete unauthorized Firebase Auth user:", userDelErr);
               }
+              await signOut(auth);
+              alert("Toegang geweigerd. Uw e-mailadres is niet bekend in het systeem.");
             }
           }
         } catch (err) {
@@ -794,26 +790,16 @@ export default function App() {
       try {
         await signInWithEmailAndPassword(auth, cleanEmail, password);
       } catch (authError: any) {
-        // If it's the admin email, owner, or any user pre-registered in the Firestore collection,
-        // try to create the account if login fails with user-not-found/invalid-credentials
-        const lowerEmail = cleanEmail.toLowerCase();
-        const isDefaultAdmin = lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com";
-        let isPreApproved = isDefaultAdmin;
-
-        if (!isPreApproved) {
-          try {
-            const userSnap = await getDocs(collection(db, "users"));
-            isPreApproved = userSnap.docs.some(d => d.data().email?.toLowerCase() === lowerEmail);
-          } catch (dbErr) {
-            console.error("Failed checking pre-approved user state", dbErr);
-          }
-        }
-
-        if ((authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential' || authError.code === 'auth/invalid-login-credentials') && isPreApproved) {
+        // Auto-register any user on first attempt. Since we cannot read Firestore before logging in,
+        // we allow creation for any auth/user-not-found or auth/invalid-credential.
+        // If they already exist and type the wrong password, createUser will throw email-already-in-use, which we map to "Onjuist wachtwoord".
+        // Unapproved accounts will be instantly deleted and signed out inside onAuthStateChanged.
+        const cleanErrCode = authError.code;
+        if (cleanErrCode === 'auth/user-not-found' || cleanErrCode === 'auth/invalid-credential' || cleanErrCode === 'auth/invalid-login-credentials') {
           try {
             await createUserWithEmailAndPassword(auth, cleanEmail, password);
           } catch (createError: any) {
-            if (createError.code === 'auth/email-already-in-use') {
+            if (createError.code === 'auth/email-already-in-use' || createError.code === 'auth/email-already-exists') {
               throw new Error("Onjuist wachtwoord.");
             }
             throw createError;

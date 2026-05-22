@@ -22,12 +22,11 @@ service cloud.firestore {
 
     // Users collection
     match /users/{userId} {
-      // Admins can see all, users can see themselves
-      allow read: if isOwner(userId) || isAdmin();
+      // Admins can see all, users can see themselves, or if the document's email matches the authenticated user's email
+      allow read: if isOwner(userId) || isAdmin() || (isSignedIn() && request.auth.token.email != null && resource.data.email.lower() == request.auth.token.email.lower());
       
-      // Allow bootstrapping: the designated admins can create their own doc
-      // Others require admin rights
-      allow create: if isAdmin() || (isOwner(userId) && (request.auth.token.email.lower() == 'partverify-pro@outlook.com' || request.auth.token.email.lower() == 'dannyradjkoemar@gmail.com'));
+      // Allow bootstrapping: any signed-in user can create their own document if they are saving their own authenticated email
+      allow create: if isAdmin() || (isOwner(userId) && request.auth.token.email != null && request.resource.data.email.lower() == request.auth.token.email.lower());
       
       allow delete: if isAdmin();
       
