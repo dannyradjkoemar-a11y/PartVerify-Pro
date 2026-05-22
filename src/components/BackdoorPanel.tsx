@@ -126,6 +126,21 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
     }
   };
 
+  const handleToggleUserTfa = async (userId: string, currentTfa: boolean) => {
+    try {
+      const nextTfa = !currentTfa;
+      const updateData: any = { tfaEnabled: nextTfa };
+      if (!nextTfa) {
+        updateData.tfaSecret = null; // Clear secret if turning off
+      }
+      await updateDoc(doc(db, "users", userId), updateData);
+      onToast(nextTfa ? "2FA ingeschakeld (verplicht gemaakt) voor gebruiker!" : "2FA uitgeschakeld voor gebruiker.");
+      loadAllBackdoorData();
+    } catch (err: any) {
+      onToast(`Fout bij instellen van 2FA status: ${err.message}`);
+    }
+  };
+
   const handleDeleteUser = async (userId: string) => {
     if (!window.confirm("Weet u zeker dat u deze gebruiker wilt verwijderen?")) return;
     try {
@@ -391,8 +406,17 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
                                 {u.role || "user"}
                               </span>
                             </td>
-                            <td className="p-4 font-bold text-slate-300">
-                              {u.tfaEnabled ? "Ja (Verplicht)" : "Nee"}
+                            <td className="p-4">
+                              <button
+                                onClick={() => handleToggleUserTfa(u.id, !!u.tfaEnabled)}
+                                className={`px-2 py-1 rounded-lg font-bold text-[9px] uppercase tracking-wide border transition-all ${
+                                  u.tfaEnabled 
+                                    ? 'bg-emerald-600/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-600/20' 
+                                    : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-300 hover:border-slate-700'
+                                }`}
+                              >
+                                {u.tfaEnabled ? "Ja (Verplicht)" : "Nee (Druk om te eisen)"}
+                              </button>
                             </td>
                             <td className="p-4 text-center">
                               <select
