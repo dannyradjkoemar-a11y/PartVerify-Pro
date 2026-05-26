@@ -3718,7 +3718,7 @@ function InputSection({ title, placeholder, value, onChange, icon, partCount }: 
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-sm font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none"
+          className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-xs font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none"
         />
         <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="px-2 py-1 bg-slate-100 rounded text-[10px] text-slate-400 font-bold uppercase">
