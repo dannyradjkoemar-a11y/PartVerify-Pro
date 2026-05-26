@@ -108,7 +108,42 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
   const parts: AutomotivePart[] = [];
   const seenIds = new Map<string, number>();
 
-  for (const line of lines) {
+  // Group multi-line entries if price is on the next line (common in Audatex/Solera)
+  const mergedLines: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const current = lines[i].trim();
+    if (!current) continue;
+
+    const isItemHeader = /^\d{4}\s+/.test(current);
+    if (isItemHeader) {
+      let nextPriceIndex = -1;
+      let priceText = "";
+
+      for (let j = i + 1; j < lines.length; j++) {
+        const nextTrimmed = lines[j].trim();
+        if (!nextTrimmed) continue;
+
+        // Check if next line looks strictly like a price (optional Euro or trailing asterisk)
+        const isPrice = /^[\d\.,\s]+[*€]?$/.test(nextTrimmed) || /^[€\s]*[\d\.,\s]+[*]?$/.test(nextTrimmed);
+        if (isPrice && nextTrimmed.length < 20) {
+          nextPriceIndex = j;
+          priceText = nextTrimmed;
+        }
+        break; // Only test the immediate next line
+      }
+
+      if (priceText && nextPriceIndex !== -1) {
+        mergedLines.push(`${current}    ${priceText}`);
+        i = nextPriceIndex; // Skip price line
+      } else {
+        mergedLines.push(current);
+      }
+    } else {
+      mergedLines.push(current);
+    }
+  }
+
+  for (const line of mergedLines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
@@ -201,3 +236,57 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
   }
   return parts;
 };
+
+// Formatter to align and clean up separate line prices with their part description line
+export function formatCalculationText(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+    if (!trimmed) {
+      result.push(line); // Preserve empty line
+      continue;
+    }
+    
+    // Check if current line starts with 4 digits and looks like a part detail line
+    const isItemHeader = /^\d{4}\s+/.test(trimmed);
+    
+    if (isItemHeader) {
+      let nextPriceIndex = -1;
+      let priceText = "";
+      
+      for (let j = i + 1; j < lines.length; j++) {
+        const nextTrimmed = lines[j].trim();
+        if (!nextTrimmed) continue;
+        
+        // Match only short price-only values (e.g. "20.13*", "€ 20,13")
+        const isPrice = /^[\d\.,\s]+[*€]?$/.test(nextTrimmed) || /^[€\s]*[\d\.,\s]+[*]?$/.test(nextTrimmed);
+        if (isPrice && nextTrimmed.length < 20) {
+          nextPriceIndex = j;
+          priceText = nextTrimmed;
+        }
+        break; // Only test immediate next non-empty line
+      }
+      
+      if (priceText && nextPriceIndex !== -1) {
+        // Merge them nicely. Use generous spaced padding so it is perfectly readable.
+        // Audatex lines are often around 45-55 chars. Let's pad to 50 characters, then append the price.
+        const targetWidth = 50;
+        let padding = "            ";
+        if (line.length < targetWidth) {
+          padding = " ".repeat(targetWidth - line.length);
+        }
+        result.push(line + padding + priceText);
+        i = nextPriceIndex; // Skip price line
+      } else {
+        result.push(line);
+      }
+    } else {
+      result.push(line);
+    }
+  }
+  
+  return result.join('\n');
+}

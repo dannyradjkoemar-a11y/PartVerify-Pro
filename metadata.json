@@ -2,5 +2,7 @@
   "name": "PartVerify Pro",
   "description": "PartVerify Pro - De site voor Professionals",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

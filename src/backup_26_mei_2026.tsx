@@ -37,8 +37,7 @@ import {
   Settings,
   HelpCircle,
   QrCode,
-  Strikethrough,
-  Camera
+  Strikethrough
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -55,7 +54,6 @@ import {
 } from "./utils";
 import { BackdoorPanel } from "./components/BackdoorPanel";
 import { ManualModal } from "./components/ManualModal";
-import { PhotoAnalysisTab } from "./components/PhotoAnalysisTab";
 
 import { initializeApp } from "firebase/app";
 import { 
@@ -103,7 +101,6 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginStep, setLoginStep] = useState<'password' | 'tfa' | 'tfa-setup'>('password');
   const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
-  const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis'>('verification');
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -149,13 +146,6 @@ export default function App() {
       console.error("Error setting session persistence:", err);
     });
   }, []);
-
-  // Secure photo analysis tab tab-switching safety check limit to admin only
-  useEffect(() => {
-    if (userProfile && userProfile.role !== "admin" && dashboardTab === "photo_analysis") {
-      setDashboardTab("verification");
-    }
-  }, [userProfile, dashboardTab]);
 
   // Load dossiers from localStorage on mount
   useEffect(() => {
@@ -1672,13 +1662,6 @@ export default function App() {
               Handleiding
             </button>
             <button 
-              onClick={() => setView(view === 'settings' ? 'dashboard' : 'settings')}
-              className={`p-2 rounded-lg transition-all ${view === 'settings' ? 'bg-blue-600 text-white shadow-lg shadow-blue-250' : 'text-slate-400 hover:text-blue-500 hover:bg-slate-50'}`}
-              title="Instellingen / Beveiliging (2FA)"
-            >
-              <Settings size={20} />
-            </button>
-            <button 
               onClick={handleLogout}
               className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 rounded-lg flex items-center gap-2 transition-all font-bold text-xs"
               title="Uitloggen"
@@ -1801,39 +1784,9 @@ export default function App() {
               </div>
             </div>
 
-            {/* Tab Selector Buttons - Only visible to admins */}
-            {userProfile?.role === 'admin' && (
-              <div className="flex bg-slate-100 hover:bg-slate-100/80 p-1 rounded-2xl max-w-md shadow-inner select-none mb-6">
-                <button
-                  onClick={() => setDashboardTab('verification')}
-                  className={`flex-1 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 ${
-                    dashboardTab === 'verification'
-                      ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <ClipboardCheck size={14} />
-                  <span>Calculatie Verificatie</span>
-                </button>
-                <button
-                  onClick={() => setDashboardTab('photo_analysis')}
-                  className={`flex-1 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 ${
-                    dashboardTab === 'photo_analysis'
-                      ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Camera size={14} />
-                  <span>CarVerify Pro</span>
-                </button>
-              </div>
-            )}
-
-            {dashboardTab === 'verification' ? (
-              <>
-                {/* Inputs - Side-by-side and placed directly at the top for immediate access */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <InputSection 
+            {/* Inputs - Side-by-side and placed directly at the top for immediate access */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <InputSection 
                 title="Eindcalculatie" 
                 placeholder="Plak hier uw eindcalculatie gegevens..." 
                 value={calcInput} 
@@ -2619,24 +2572,7 @@ export default function App() {
               </div>
             </div>
           </>
-        ) : userProfile?.role === "admin" ? (
-          <PhotoAnalysisTab 
-            licensePlate={licensePlate}
-            vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
-            onApplySuggestedAE={(ae) => {
-              setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
-            }}
-            db={db}
-            userId={user?.uid}
-            calcInput={calcInput}
-          />
-        ) : (
-          <div className="p-8 text-center text-rose-600 bg-rose-50 border border-rose-100 rounded-3xl font-bold">
-            U heeft geen toegang tot CarVerify Pro. Neem contact op met Danny.
-          </div>
-        )}
-      </>
-    ) : view === 'settings' ? (
+        ) : view === 'settings' ? (
           <SettingsView 
             isTfaEnabled={isTfaEnabled}
             tfaSecret={tfaSecret}
@@ -3814,7 +3750,7 @@ function InputSection({ title, placeholder, value, onChange, icon, partCount, on
               }, 0);
             }
           }}
-          className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-[10.5px] font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none leading-relaxed"
+          className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-xs font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none"
         />
         <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="px-2 py-1 bg-slate-100 rounded text-[10px] text-slate-400 font-bold uppercase">
