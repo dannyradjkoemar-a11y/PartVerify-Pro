@@ -1677,24 +1677,24 @@ export default function App() {
           <>
             {/* Top Bar: Dossier Info */}
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
-              <div className="flex-1 bg-white p-5 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                <div className="col-span-1 md:col-span-5 lg:col-span-6">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Kenteken</label>
-                  <div className="flex items-center gap-4">
+              <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+                <div className="w-full">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
+                  <div className="flex items-center gap-3">
                     {/* Dutch styled license plate input - Upgraded for premium readability & visual rest */}
-                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-md h-20 flex-1 max-w-[380px] transition-all hover:shadow-lg focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-16 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
                       {/* EU/NL banner - Optimized for height & crisp typography */}
-                      <div className="bg-[#0039AE] text-white text-[10px] w-12 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15">
-                        <span className="text-[13px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
-                        <span className="text-[14px] font-sans font-black tracking-normal leading-none select-none">NL</span>
+                      <div className="bg-[#0039AE] text-white text-[10px] w-10 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
+                        <span className="text-[12px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                        <span className="text-[13px] font-sans font-black tracking-normal leading-none select-none">NL</span>
                       </div>
                       
-                      {/* Input - Large 3XL soothing high-legibility font with clean letter spacing */}
+                      {/* Input - Large 2XL soothing high-legibility font with clean letter spacing */}
                       <input 
                         type="text"
                         placeholder="AB-123-C"
                         maxLength={11}
-                        className="w-full bg-transparent text-center text-3xl md:text-4xl font-black font-mono placeholder:text-slate-900/25 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-3 selection:bg-slate-900/20"
+                        className="w-full bg-transparent text-center text-xl md:text-2xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20"
                         value={licensePlate}
                         onChange={(e) => setLicensePlate(e.target.value)}
                       />
@@ -1708,51 +1708,47 @@ export default function App() {
                            }
                         }}
                         disabled={vehicleLoading}
-                        className={`px-4 py-2.5 rounded-xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                        className={`h-16 px-4 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
                           vehicleData 
                             ? 'bg-yellow-300 text-slate-950 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
                             : vehicleLoading 
                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50' 
-                            : 'bg-blue-50 text-blue-600 border border-blue-105 hover:bg-blue-100 hover:text-blue-700'
+                            : 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 hover:text-blue-700'
                         }`}
                         title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
                       >
-                        <CarFront size={14} className={vehicleLoading ? "animate-spin text-blue-550" : "text-current"} />
+                        <CarFront size={14} className={vehicleLoading ? "animate-spin text-blue-500" : "text-current"} />
                         <span>{vehicleLoading ? 'Laden...' : 'RDW'}</span>
                       </button>
                     )}
                   </div>
                 </div>
 
-                <div className="hidden md:block w-px h-12 bg-slate-100 justify-self-center col-span-1" />
-
-                <div className="col-span-1 md:col-span-3">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Dossiernummer</label>
+                <div className="w-full">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Dossiernummer</label>
                   <input 
                     type="text"
                     placeholder="Invoeren..."
-                    className="w-full bg-slate-50 border border-slate-100 px-4 py-3.5 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all placeholder:text-slate-300"
+                    className="w-full h-16 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all placeholder:text-slate-300 shadow-sm"
                     value={caseNumber}
                     onChange={(e) => setCaseNumber(e.target.value)}
                   />
                 </div>
 
-                <div className="hidden lg:block w-px h-12 bg-slate-100 justify-self-center col-span-1" />
-
-                <div className="col-span-1 md:col-span-2">
-                  <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 ml-1">Opdrachtgever</label>
+                <div className="w-full">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Opdrachtgever</label>
                   <div className="relative">
                     <select 
                       value={selectedClientId}
                       onChange={(e) => setSelectedClientId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-100 px-4 py-3.5 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all appearance-none cursor-pointer pr-10"
+                      className="w-full h-16 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all appearance-none cursor-pointer pr-10 shadow-sm"
                     >
                       <option value="">Geen / Standaard</option>
                       {clients.map(c => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
-                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-slate-400">
+                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
                       <Layers size={14} />
                     </div>
                   </div>
@@ -1785,6 +1781,26 @@ export default function App() {
                   <span>Reset</span>
                 </button>
               </div>
+            </div>
+
+            {/* Inputs - Side-by-side and placed directly at the top for immediate access */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <InputSection 
+                title="Eindcalculatie" 
+                placeholder="Plak hier uw eindcalculatie gegevens..." 
+                value={calcInput} 
+                onChange={setCalcInput} 
+                icon={<ClipboardCheck className="w-5 h-5 text-blue-600" />}
+                partCount={calculationParts.length}
+              />
+              <InputSection 
+                title="Inkoopfacturen" 
+                placeholder="Plak hier de gegevens van inkoopfactur(en)..." 
+                value={invoiceInput} 
+                onChange={setInvoiceInput} 
+                icon={<Layers className="w-5 h-5 text-indigo-600" />}
+                partCount={invoiceParts.length}
+              />
             </div>
 
 
@@ -2101,32 +2117,14 @@ export default function App() {
                   <div>
                     <h4 className="text-xs font-black uppercase text-cyan-400 tracking-widest">[ANALYSIS_PORT_IDLE]</h4>
                     <p className="text-[10px] text-slate-400 max-w-sm mx-auto leading-relaxed mt-1">
-                      Wachten op syntactische inputstream. Plak calculatie- en inkoopfactuurgegevens in de onderstaande buffers om de diagnostische telemetry-matrix te initialiseren.
+                      Wachten op syntactische inputstream. Plak calculatie- en inkoopfactuurgegevens in de bovenstaande buffers om de diagnostische telemetry-matrix te initialiseren.
                     </p>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Inputs - Stacked vertically for clarity as requested */}
-            <div className="space-y-10">
-              <InputSection 
-                title="Eindcalculatie" 
-                placeholder="Plak hier uw eindcalculatie gegevens..." 
-                value={calcInput} 
-                onChange={setCalcInput} 
-                icon={<ClipboardCheck className="w-5 h-5 text-blue-600" />}
-                partCount={calculationParts.length}
-              />
-              <InputSection 
-                title="Inkoopfacturen" 
-                placeholder="Plak hier de gegevens van inkoopfactur(en)..." 
-                value={invoiceInput} 
-                onChange={setInvoiceInput} 
-                icon={<Layers className="w-5 h-5 text-indigo-600" />}
-                partCount={invoiceParts.length}
-              />
-            </div>
+
 
           {/* RDW ADAS / Radar Intelli-Audit Alerts */}
           {(() => {
@@ -3720,7 +3718,7 @@ function InputSection({ title, placeholder, value, onChange, icon, partCount }: 
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full h-64 bg-white border border-slate-200 rounded-3xl p-6 text-sm font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none"
+          className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-sm font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none"
         />
         <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
           <div className="px-2 py-1 bg-slate-100 rounded text-[10px] text-slate-400 font-bold uppercase">
