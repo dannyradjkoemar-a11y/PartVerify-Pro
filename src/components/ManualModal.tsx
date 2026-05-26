@@ -141,33 +141,6 @@ export function ManualModal({ isOpen, onClose }: ManualModalProps) {
             </div>
           </div>
 
-          {/* Section 5 (Admin & God Mode) */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-blue-100 text-blue-600 text-xs font-black rounded-lg flex items-center justify-center text-amber-600 bg-amber-50">5</div>
-              <h3 className="font-black text-slate-800 uppercase text-xs tracking-wider text-amber-800">God Mode & Gebruikersbeheer (Beheerder)</h3>
-            </div>
-            <div className="pl-8 space-y-2">
-              <p>
-                Als admin en eigenaar heeft u diepgaande controle via de verborgen <span className="font-bold text-amber-700">God Mode Developer Panel</span>:
-              </p>
-              <ul className="list-disc pl-5 space-y-1.5 text-xs text-slate-500">
-                <li>
-                  <span className="font-bold text-slate-700">Hoe te openen:</span> Klik exact <span className="font-bold text-slate-700">5 keer op de auto-logo</span> linksboven in de header. U heeft hier wel de login credentials van <span className="font-semibold text-slate-700">partverify-pro@outlook.com</span> voor nodig.
-                </li>
-                <li>
-                  <span className="font-bold text-slate-700">Gebruikers en Rollen:</span> In God Mode kunt u alle actieve gebruikers inzien, specifieke gebruikers de rol <span className="font-bold">admin</span> of <span className="font-bold">user</span> toewijzen via een dropdown, of ze volledig verwijderen uit de database.
-                </li>
-                <li>
-                  <span className="font-bold text-slate-700">Automatische User-rol:</span> Iedereen die wordt toegevoegd of inlogt, krijgt automatisch de veilige <span className="font-bold">user</span> rol toegewezen. Zo kan een gewone medewerker nooit zomaar systeem-instellingen wijzigen.
-                </li>
-                <li>
-                  <span className="font-bold text-slate-700">Direct Nieuwe Gebruikers Aanmaken:</span> U kunt direct in God Mode een nieuw e-mailadres invoeren en opslaan. De code zorgt ervoor dat zij direct correct gekoppeld worden. Tevens is er een directe link naar de <span className="font-bold">Firebase Console</span> aanwezig om credentials aan te maken of te beheren.
-                </li>
-              </ul>
-            </div>
-          </div>
-
           {/* Section 6 (Developed by) */}
           <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
