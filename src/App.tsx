@@ -114,7 +114,7 @@ export default function App() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
-  const [clientPrices, setClientPrices] = useState<Record<string, number[]>>({});
+  const [clientPrices, setClientPrices] = useState<any[]>([]);
 
   const [tfaSecret, setTfaSecret] = useState<string | null>(null);
   const [isTfaEnabled, setIsTfaEnabled] = useState<boolean>(false);
@@ -781,12 +781,15 @@ export default function App() {
       const loadPrices = async () => {
         try {
           const snapshot = await getDocs(collection(db, "clients", selectedClientId, "prices"));
-          const prices: Record<string, number[]> = {};
+          const prices: any[] = [];
           snapshot.docs.forEach(d => {
             const data = d.data();
-            const norm = normalizePartNumber(data.partNumber);
-            if (!prices[norm]) prices[norm] = [];
-            prices[norm].push(data.price);
+            prices.push({
+              id: d.id,
+              partNumber: data.partNumber || "",
+              description: data.description || "",
+              price: Number(data.price) || 0
+            });
           });
           setClientPrices(prices);
         } catch (err) {
@@ -795,7 +798,7 @@ export default function App() {
       };
       loadPrices();
     } else {
-      setClientPrices({});
+      setClientPrices([]);
     }
   }, [selectedClientId]);
 
@@ -1022,11 +1025,38 @@ export default function App() {
         descriptionsMatch(calcPart.description, invPart.description)
       ) : null;
 
-      const clientPriceList = clientPrices[normalizedCalc] || [];
-      const matchingPriceClient = clientPriceList.find(p => Math.abs(p - calcPart.price) < 0.005);
-      const matchesClientPrice = matchingPriceClient !== undefined;
+      const kentekenSynonyms = ["kentekenplaat", "license plate", "number plate", "kenteken"];
+      const matchingClientPriceItems = Array.isArray(clientPrices) ? clientPrices.filter(p => {
+        const pNorm = normalizePartNumber(p.partNumber || "");
+        
+        // Match 1: Exact normalized part number match
+        if (pNorm && pNorm === normalizedCalc) return true;
+        
+        // Match 2: Semantic description match between client pricing item and calculation part
+        if (p.description && descriptionsMatch(calcPart.description, p.description)) return true;
+        
+        // Match 3: If part has generic name/synonym like "kentekenplaat"
+        const calcLower = calcPart.description.toLowerCase();
+        const pLower = (p.description || "").toLowerCase();
+        const pNumLower = (p.partNumber || "").toLowerCase();
+        
+        if (kentekenSynonyms.some(s => calcLower.includes(s)) && (kentekenSynonyms.some(s => pLower.includes(s)) || kentekenSynonyms.some(s => pNumLower.includes(s)))) {
+          return true;
+        }
 
-      const virtualClientMatch = matchesClientPrice ? {
+        // Match 4: Check if part number of client matches description semantically
+        if (p.partNumber && descriptionsMatch(calcPart.description, p.partNumber)) return true;
+        
+        return false;
+      }) : [];
+
+      const matchingClientPriceItem = matchingClientPriceItems.find(p => Math.abs((Number(p.price) || 0) - calcPart.price) < 0.005) 
+        || matchingClientPriceItems[0];
+
+      const matchesClientPrice = matchingClientPriceItem && Math.abs((Number(matchingClientPriceItem.price) || 0) - calcPart.price) < 0.005 ? true : false;
+      const matchingPriceClient = matchingClientPriceItem?.price;
+
+      const virtualClientMatch = matchingPriceClient !== undefined ? {
         id: `CLIENT-${calcPart.id}`,
         description: `Prijslijst: ${clients.find(c => c.id === selectedClientId)?.name || 'Opdrachtgever'}`,
         partNumber: calcPart.partNumber,
@@ -1080,7 +1110,7 @@ export default function App() {
     };
 
     return allResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
-  }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides]);
+  }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides, clientPrices, selectedClientId, clients]);
 
   const stats = useMemo(() => {
     const matched = results.filter(r => r.status === 'matched').length;
@@ -2199,7 +2229,7 @@ export default function App() {
                     <AnimatePresence mode="popLayout">
                       {filteredResults.length > 0 ? (
                         filteredResults.map((res, i) => {
-                          const isUnchanged = res.status === 'matched' || res.status === 'approved';
+                          const isUnchanged = res.status === 'matched';
                           const shouldDim = dimUnchanged && isUnchanged;
                           return (
                             <motion.tr 
