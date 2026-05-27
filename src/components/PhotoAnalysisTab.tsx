@@ -49,6 +49,8 @@ interface AIToolTrainingLog {
   userActualTotalAE: number;
   reasons: string[];
   notes: string;
+  images?: string[];
+  calculationText?: string;
 }
 
 interface PhotoAnalysisTabProps {
@@ -58,20 +60,22 @@ interface PhotoAnalysisTabProps {
   db?: any;
   userId?: string;
   calcInput?: string;
+  mode?: 'analysis' | 'training';
 }
 
-export function PhotoAnalysisTab({ licensePlate, vehicleModel, onApplySuggestedAE, db, userId, calcInput }: PhotoAnalysisTabProps) {
+export function PhotoAnalysisTab({ licensePlate, vehicleModel, onApplySuggestedAE, db, userId, calcInput, mode = 'analysis' }: PhotoAnalysisTabProps) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [additionalNotes, setAdditionalNotes] = useState("");
   const [activeImage, setActiveImage] = useState<UploadedImage | null>(null);
+  const [selectedZoomLogImage, setSelectedZoomLogImage] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
   // Linked Calculation States
-  const [linkCalculation, setLinkCalculation] = useState(true);
+  const [linkCalculation, setLinkCalculation] = useState(mode !== 'analysis');
   const [customCalcInput, setCustomCalcInput] = useState("");
   const [autoAnalyse, setAutoAnalyse] = useState(true);
   const [lastAutoAnalyzedIds, setLastAutoAnalyzedIds] = useState("");
@@ -83,9 +87,18 @@ export function PhotoAnalysisTab({ licensePlate, vehicleModel, onApplySuggestedA
   const [calibrationNotes, setCalibrationNotes] = useState("");
   const [isFeeding, setIsFeeding] = useState(false);
   const [feedSuccess, setFeedSuccess] = useState(false);
-  const [showLogsCenter, setShowLogsCenter] = useState(false);
+  const [showLogsCenter, setShowLogsCenter] = useState(mode === 'training');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync mode transitions
+  useEffect(() => {
+    setLinkCalculation(mode !== 'analysis');
+    setAnalysisResult(null);
+    setImages([]);
+    setLastAutoAnalyzedIds("");
+    setShowLogsCenter(mode === 'training');
+  }, [mode]);
 
   // Load past training / calibration logs
   useEffect(() => {
@@ -111,7 +124,9 @@ export function PhotoAnalysisTab({ licensePlate, vehicleModel, onApplySuggestedA
               aiSuggestedTotalAE: aiAE,
               userActualTotalAE: userAE,
               reasons: data.reasons || [],
-              notes: data.notes || ""
+              notes: data.notes || "",
+              images: data.images || [],
+              calculationText: data.calculationText || ""
             });
           });
           // Sort descending by timestamp
@@ -220,7 +235,6 @@ export function PhotoAnalysisTab({ licensePlate, vehicleModel, onApplySuggestedA
 
   // Add a training event
   const handleFeedModel = async () => {
-    if (!analysisResult) return;
     const actualAENum = parseInt(userActualHours, 10);
     if (isNaN(actualAENum) || actualAENum < 0) {
       alert("Voer a.u.b. een geldig positief aantal arbeidseenheden (AE) in.");
@@ -230,14 +244,20 @@ export function PhotoAnalysisTab({ licensePlate, vehicleModel, onApplySuggestedA
     setIsFeeding(true);
     setFeedSuccess(false);
 
+    // Save image base64 payloads and active calculation inputs with the training event
+    const imagePayloads = images.map(img => img.anonymizedUrl || img.originalUrl);
+    const activeCalc = calcInput || customCalcInput;
+
     const newLog: Omit<AIToolTrainingLog, "id"> & { id?: string; userId?: string } = {
       timestamp: new Date().toISOString(),
       vehicleModel: vehicleModel || "Onbekend model",
       licensePlate: licensePlate || "Onbekend",
-      aiSuggestedTotalAE: analysisResult.suggested_total_ae || Math.round((analysisResult.suggested_total_hours || 0) * 10),
+      aiSuggestedTotalAE: analysisResult ? (analysisResult.suggested_total_ae || Math.round((analysisResult.suggested_total_hours || 0) * 10)) : 0,
       userActualTotalAE: actualAENum,
       reasons: selectedReasons.length > 0 ? selectedReasons : ["Algemene correctie"],
-      notes: calibrationNotes
+      notes: calibrationNotes,
+      images: imagePayloads,
+      calculationText: activeCalc || ""
     };
 
     try {
@@ -682,14 +702,21 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="p-1 px-2.5 bg-blue-100 text-blue-700 font-black rounded-lg text-[9px] uppercase tracking-wider">Premium Plus</span>
+            <span className="p-1 px-2.5 bg-blue-100 text-blue-700 font-black rounded-lg text-[9px] uppercase tracking-wider">
+              {mode === 'analysis' ? 'Snelle Schatting' : 'Model Kalibratie'}
+            </span>
             <span className="p-1 px-2.5 bg-emerald-100 text-emerald-700 font-black rounded-lg text-[9px] uppercase tracking-wider flex items-center gap-1">
-              <Shield size={10} /> Privacy Beveiligd
+              <Shield size={10} /> AVG Privacy Filter
             </span>
           </div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-800">📸 CarVerify Pro — Herstelfoto's & Calculatie-Analyse</h2>
-          <p className="text-xs text-slate-400 max-w-2xl">
-            Upload schadefoto's om direct kentekens en gezichten automatisch te blurren. De AI analyseert vervolgens de schade en adviseert hersteltijden in arbeidseenheden (AE) (1 AE = 6 min).
+          <h2 className="text-xl font-bold tracking-tight text-slate-800">
+            {mode === 'analysis' ? '📸 CarVerify Pro — Snelle Foto-Schatting' : '🎓 CarVerify Training Centre — AI Voeden & Kalibreren'}
+          </h2>
+          <p className="text-xs text-slate-400 max-w-2xl font-medium">
+            {mode === 'analysis' 
+              ? "Sleep herstelfoto's in het venster om direct kentekens & gezichten onherkenbaar te maken. De AI geeft u vervolgens direct advies hoeveel AE u kunt opvoeren op basis van de visuele schade."
+              : "Voer herstelfoto's in én plak de bijbehorende eindcalculatie om de AI te trainen op uw specifieke schrijfstijl. Kalibreer vervolgens het model zodat toekomstige automatische controles vanzelfsprekend foutloos verlopen."
+            }
           </p>
         </div>
       </div>
@@ -798,61 +825,63 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
             )}
 
             {/* Step 2: Linked Calculation Section */}
-            <div className="space-y-3 bg-slate-50 border border-slate-250/60 p-5 rounded-2xl">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="p-1 px-2 py-0.5 bg-blue-100 text-blue-700 font-extrabold rounded-md text-[9px] uppercase tracking-wide flex items-center gap-1 shadow-sm border border-blue-200">
-                    <CheckCircle2 size={10} /> Slimme Koppeling
-                  </span>
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Eindcalculatie Koppelen</span>
+            {mode === 'training' && (
+              <div className="space-y-3 bg-slate-50 border border-slate-250/60 p-5 rounded-2xl animate-in fade-in duration-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="p-1 px-2 py-0.5 bg-blue-100 text-blue-700 font-extrabold rounded-md text-[9px] uppercase tracking-wide flex items-center gap-1 shadow-sm border border-blue-200">
+                      <CheckCircle2 size={10} /> Slimme Koppeling
+                    </span>
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider font-extrabold">Eindcalculatie Koppelen</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={linkCalculation} 
+                      onChange={(e) => setLinkCalculation(e.target.checked)}
+                      className="sr-only peer" 
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input 
-                    type="checkbox" 
-                    checked={linkCalculation} 
-                    onChange={(e) => setLinkCalculation(e.target.checked)}
-                    className="sr-only peer" 
-                  />
-                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
 
-              {linkCalculation ? (
-                <div className="space-y-2 animate-in fade-in duration-200">
-                  {calcInput ? (
-                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
-                        <span>● Gekoppeld vanuit calculatietab</span>
-                        <span>{calcInput.trim().split("\n").filter(line => line.trim().length > 0).length} Regels</span>
+                {linkCalculation ? (
+                  <div className="space-y-2">
+                    {calcInput ? (
+                      <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
+                          <span>● Gekoppeld vanuit calculatietab</span>
+                          <span>{calcInput.trim().split("\n").filter(line => line.trim().length > 0).length} Regels</span>
+                        </div>
+                        <div className="bg-slate-50 p-2.5 rounded-lg text-[10px] font-mono font-medium max-h-[100px] overflow-y-auto text-slate-600 whitespace-pre-wrap border border-slate-100">
+                          {calcInput}
+                        </div>
                       </div>
-                      <div className="bg-slate-50 p-2.5 rounded-lg text-[10px] font-mono font-medium max-h-[100px] overflow-y-auto text-slate-600 whitespace-pre-wrap border border-slate-100">
-                        {calcInput}
+                    ) : (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          Er is momenteel geen eindcalculatie ingevoerd in het dossier. Plak uw calculatietekst hieronder om de AI uw schrijfstijl te leren en te matchen met foto's:
+                        </p>
+                        <textarea
+                          value={customCalcInput}
+                          onChange={(e) => setCustomCalcInput(e.target.value)}
+                          placeholder="Plak hier uw handmatige eindcalculatie (bijv: 'Bumper herstellen 2.5, Spuitwerkzaamheden 3.0')"
+                          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none h-20 resize-none"
+                        />
                       </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <p className="text-[10px] text-slate-500 font-medium">
-                        Er is momenteel geen eindcalculatie ingevoerd in het dossier. Plak uw calculatietekst hieronder om de AI uw schrijfstijl te leren en te matchen met foto's:
-                      </p>
-                      <textarea
-                        value={customCalcInput}
-                        onChange={(e) => setCustomCalcInput(e.target.value)}
-                        placeholder="Plak hier uw handmatige eindcalculatie (bijv: 'Bumper herstellen 2.5, Spuitwerkzaamheden 3.0')"
-                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none h-20 resize-none"
-                      />
-                    </div>
-                  )}
-                  
-                  <p className="text-[9px] text-slate-400 font-medium">
-                    De AI zal deze eindcalculatie direct matchen tegen de geüploade schadefoto's om te leren hoe u specifieke carrosseriedelen beoordeelt, en stemt het advies daar intelligent op af.
+                    )}
+                    
+                    <p className="text-[9px] text-slate-400 font-medium leading-relaxed">
+                      De AI zal deze eindcalculatie direct matchen tegen de geüploade schadefoto's om te leren hoe u specifieke carrosseriedelen beoordeelt, en stemt het advies daar intelligent op af.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[9px] text-slate-400 font-medium italic">
+                    Eindcalculatie koppelen is uitgeschakeld. Het model geeft een standaard objectieve schatting uitsluitend op basis van de foto's.
                   </p>
-                </div>
-              ) : (
-                <p className="text-[9px] text-slate-400 font-medium italic">
-                  Eindcalculatie koppelen is uitgeschakeld. Het model geeft een standaard objectieve schatting uitsluitend op basis van de foto's.
-                </p>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
             {/* Bliksem-Analyse Auto-Trigger Switch */}
             <div className="bg-emerald-50/40 border border-emerald-150 p-4 rounded-2xl flex items-center justify-between gap-3">
@@ -892,12 +921,18 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
               <span className="font-extrabold text-blue-800 uppercase text-[10px] tracking-wider block">⚡ Start Instructie</span>
               <p className="leading-relaxed">
                 {autoAnalyse ? (
-                  <span>
-                    🎉 <strong>Automatische modus actief</strong>: Zodra uw geüploade foto's geladen zijn en er een calculatie aanwezig is, start de verwerking direct! U hoeft nergens op te drukken.
-                  </span>
+                  mode === 'analysis' ? (
+                    <span>
+                      🎉 <strong>Automatische modus actief</strong>: Zodra uw geüploade foto's geladen zijn, start de schade-schatting direct! U hoeft nergens op te drukken.
+                    </span>
+                  ) : (
+                    <span>
+                      🎉 <strong>Automatische modus actief</strong>: Zodra uw geüploade foto's geladen zijn en de calculatie gekoppeld is, start de kalibratie-analyse direct!
+                    </span>
+                  )
                 ) : (
                   <span>
-                    Nadat u de <strong>foto's</strong> en/of de <strong>eindcalculatie</strong> heeft klaargezet, dient u handmatig op de grote knop hieronder te drukken om de analyse te starten.
+                    Nadat u de <strong>foto's</strong> {mode === 'training' && "en de eindcalculatie"} online heeft klaargezet, dient u handmatig op de knop hieronder te klikken om de {mode === 'analysis' ? "schatting" : "kalibratie"} te starten.
                   </span>
                 )}
               </p>
@@ -1064,113 +1099,269 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
                 )}
 
                 {/* Calibration Feedback section (Voeden) */}
-                <div className="border-t border-slate-100 pt-6 mt-6 space-y-4">
-                  <div className="flex items-center gap-2">
-                    <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
-                      <GraduationCap size={16} />
-                    </span>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide">AI Model Voeden & Trainen ("Danny's Expertise")</h4>
-                      <p className="text-[10px] text-slate-400">Corrigeer de AI op basis van uw herstelexpertise zodat het model hiervan leert in AE</p>
-                    </div>
-                  </div>
-
-                  {feedSuccess ? (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-[11px] text-emerald-800 flex items-start gap-3"
-                    >
-                      <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={16} />
+                {mode === 'training' && (
+                  <div className="border border-slate-150 p-5 rounded-3xl pt-6 mt-6 space-y-4 bg-slate-50/50">
+                    <div className="flex items-center gap-2">
+                      <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                        <GraduationCap size={16} />
+                      </span>
                       <div>
-                        <span className="font-extrabold block">Leermodel Succesvol Gevoed!</span>
-                        Toekomstige fotoverificaties op dit dossier worden gekalibreerd volgens uw Danny Radjkoemar-expertiseniveau.
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide">AI Model Voeden & Trainen ("Danny's Expertise")</h4>
+                        <p className="text-[10px] text-slate-400">Corrigeer de AI op basis van uw herstelexpertise zodat het model hiervan leert in AE</p>
                       </div>
-                    </motion.div>
-                  ) : (
-                    <div className="space-y-3.5 bg-slate-50 p-4 rounded-2xl border border-slate-150">
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Hoeveel AE zou u hier echt schrijven? (10 AE = 1 uur)</label>
-                        <div className="relative">
-                          <input 
-                            type="number"
-                            step="1"
-                            placeholder={(analysisResult.suggested_total_ae || Math.round((analysisResult.suggested_total_hours || 0) * 10)).toString()}
-                            value={userActualHours}
-                            onChange={(e) => setUserActualHours(e.target.value)}
-                            className="w-full bg-white p-3 pr-12 border border-slate-200 rounded-xl text-xs font-bold focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none"
-                          />
-                          <span className="absolute right-3 top-3 text-slate-400 text-xs font-bold">AE</span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Reden van correctie / leermateriaal</label>
-                        <div className="grid grid-cols-2 gap-2 text-[9px] font-bold text-slate-600">
-                          {[
-                            "Plaatwerk intensiever",
-                            "Speciale lak (parelmoer)",
-                            "Verborgen ADAS kalibratie",
-                            "Demonteren / monteren uren",
-                            "Materiaalvervanging vereist",
-                            "Richtbank noodzakelijk"
-                          ].map((reason) => {
-                            const active = selectedReasons.includes(reason);
-                            return (
-                              <button
-                                key={reason}
-                                type="button"
-                                onClick={() => {
-                                  if (active) {
-                                    setSelectedReasons(prev => prev.filter(r => r !== reason));
-                                  } else {
-                                    setSelectedReasons(prev => [...prev, reason]);
-                                  }
-                                }}
-                                className={`p-2 text-left rounded-lg border transition-all ${
-                                  active 
-                                    ? "bg-blue-600 text-white border-blue-600 shadow-sm" 
-                                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
-                                }`}
-                              >
-                                {reason}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Aantekeningen voor de AI (optioneel)</label>
-                        <textarea
-                          placeholder="Bijv. 'Dampers en sensoren moeten opnieuw geprogrammeerd worden bij deze bumper...'"
-                          value={calibrationNotes}
-                          onChange={(e) => setCalibrationNotes(e.target.value)}
-                          className="w-full bg-white p-3 border border-slate-200 rounded-xl text-[11px] font-medium focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none h-16 resize-none"
-                        />
-                      </div>
-
-                      <button
-                        onClick={handleFeedModel}
-                        disabled={!userActualHours || isFeeding}
-                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-550 disabled:opacity-50 text-white text-[11px] font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
-                      >
-                        {isFeeding ? (
-                          <>
-                            <Loader2 size={12} className="animate-spin" />
-                            <span>Bezig met kalibreren...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles size={12} />
-                            <span>Dien in als Leermateriaal (Voed AI)</span>
-                          </>
-                        )}
-                      </button>
                     </div>
-                  )}
+
+                    {feedSuccess ? (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-[11px] text-emerald-800 flex items-start gap-3"
+                      >
+                        <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={16} />
+                        <div>
+                          <span className="font-extrabold block">Leermodel Succesvol Gevoed!</span>
+                          Toekomstige fotoverificaties op dit dossier worden gekalibreerd volgens uw Danny Radjkoemar-expertiseniveau.
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <div className="space-y-3.5 bg-white p-4 rounded-2xl border border-slate-150">
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Hoeveel AE zou u hier echt schrijven? (10 AE = 1 uur)</label>
+                          <div className="relative">
+                            <input 
+                              type="number"
+                              step="1"
+                              placeholder={(analysisResult.suggested_total_ae || Math.round((analysisResult.suggested_total_hours || 0) * 10)).toString()}
+                              value={userActualHours}
+                              onChange={(e) => setUserActualHours(e.target.value)}
+                              className="w-full bg-white p-3 pr-12 border border-slate-200 rounded-xl text-xs font-bold focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none"
+                            />
+                            <span className="absolute right-3 top-3 text-slate-400 text-xs font-bold">AE</span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Reden van correctie / leermateriaal</label>
+                          <div className="grid grid-cols-2 gap-2 text-[9px] font-bold text-slate-600">
+                            {[
+                              "Plaatwerk intensiever",
+                              "Speciale lak (parelmoer)",
+                              "Verborgen ADAS kalibratie",
+                              "Demonteren / monteren uren",
+                              "Materiaalvervanging vereist",
+                              "Richtbank noodzakelijk"
+                            ].map((reason) => {
+                              const active = selectedReasons.includes(reason);
+                              return (
+                                <button
+                                  key={reason}
+                                  type="button"
+                                  onClick={() => {
+                                    if (active) {
+                                      setSelectedReasons(prev => prev.filter(r => r !== reason));
+                                    } else {
+                                      setSelectedReasons(prev => [...prev, reason]);
+                                    }
+                                  }}
+                                  className={`p-2 text-left rounded-lg border transition-all ${
+                                    active 
+                                      ? "bg-blue-600 text-white border-blue-600 shadow-sm" 
+                                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                  }`}
+                                >
+                                  {reason}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Aantekeningen voor de AI (optioneel)</label>
+                          <textarea
+                            placeholder="Bijv. 'Dampers en sensoren moeten opnieuw geprogrammeerd worden bij deze bumper...'"
+                            value={calibrationNotes}
+                            onChange={(e) => setCalibrationNotes(e.target.value)}
+                            className="w-full bg-white p-3 border border-slate-200 rounded-xl text-[11px] font-medium focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none h-16 resize-none"
+                          />
+                        </div>
+
+                        <button
+                          onClick={handleFeedModel}
+                          disabled={!userActualHours || isFeeding}
+                          className="w-full py-2.5 bg-blue-600 hover:bg-blue-550 disabled:opacity-50 text-white text-[11px] font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                        >
+                          {isFeeding ? (
+                            <>
+                              <Loader2 size={12} className="animate-spin" />
+                              <span>Bezig met kalibreren...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles size={12} />
+                              <span>Dien in als Leermateriaal (Voed AI)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              </motion.div>
+            ) : mode === 'training' ? (
+              <motion.div 
+                key="training-standalone"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-6"
+              >
+                {/* Visual Header */}
+                <div className="flex items-center gap-3 border-b pb-4">
+                  <div className="p-2.5 bg-blue-550/10 text-blue-600 rounded-xl">
+                    <GraduationCap size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-slate-705 uppercase tracking-wider">Met herstelfoto's AI Trainen</h3>
+                    <p className="text-[10px] text-slate-400">Verbind foto's direct aan uw gewenste eindcalculatie en AE</p>
+                  </div>
                 </div>
 
+                {/* Show thumbnail references if they've uploaded something */}
+                {images.length > 0 ? (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-extrabold text-slate-500 uppercase block">Gekoppelde Foto's ({images.length})</span>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {images.map(img => (
+                        <div key={img.id} className="w-12 h-12 rounded-lg border overflow-hidden shrink-0 bg-slate-100 relative">
+                          <img src={img.anonymizedUrl || img.originalUrl} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-[11px] text-amber-800 flex items-center gap-2 font-medium">
+                    <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                    <span>Upload eerst herstelfoto's aan de linkerkant om de AI visueel te voeden.</span>
+                  </div>
+                )}
+
+                {/* Training Form Fields */}
+                {feedSuccess ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl text-[11px] text-emerald-800 flex items-start gap-3"
+                  >
+                    <CheckCircle2 className="text-emerald-600 shrink-0 mt-0.5" size={16} />
+                    <div>
+                      <span className="font-extrabold block">Trainings-object succesvol opgeslagen!</span>
+                      De foto's, calculatie en de opgegeven {userActualHours || "AE"} AE zijn stevig verankerd in uw AI-leermodel.
+                    </div>
+                  </motion.div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Hoeveel AE schrijft u hier? (10 AE = 1 uur)</label>
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          step="1"
+                          placeholder="Bijv. 25"
+                          value={userActualHours}
+                          onChange={(e) => setUserActualHours(e.target.value)}
+                          className="w-full bg-slate-50/50 p-3 pr-12 border border-slate-200 rounded-xl text-xs font-bold focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none"
+                        />
+                        <span className="absolute right-3 top-3 text-slate-400 text-xs font-bold">AE</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Gekoppelde Eindcalculatie</label>
+                      {calcInput ? (
+                        <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+                          <div className="flex items-center justify-between text-[9px] text-emerald-600 font-bold uppercase tracking-wider">
+                            <span>● Gekoppeld van dossier</span>
+                          </div>
+                          <div className="bg-white p-2 rounded-lg text-[10px] font-mono font-medium max-h-[80px] overflow-y-auto text-slate-600 whitespace-pre-wrap border border-slate-100">
+                            {calcInput}
+                          </div>
+                        </div>
+                      ) : (
+                        <textarea
+                          value={customCalcInput}
+                          onChange={(e) => setCustomCalcInput(e.target.value)}
+                          placeholder="Plak hier de bijbehorende eindcalculatieregel(s)... (optioneel)"
+                          className="w-full p-3 bg-slate-50/55 border border-slate-200 rounded-xl text-xs font-medium focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none h-16 resize-none"
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Reden van correctie / leermateriaal</label>
+                      <div className="grid grid-cols-2 gap-2 text-[9px] font-bold text-slate-600">
+                        {[
+                          "Plaatwerk intensiever",
+                          "Speciale lak (parelmoer)",
+                          "Verborgen ADAS kalibratie",
+                          "Demonteren / monteren uren",
+                          "Materiaalvervanging vereist",
+                          "Richtbank noodzakelijk"
+                        ].map((reason) => {
+                          const active = selectedReasons.includes(reason);
+                          return (
+                            <button
+                              key={reason}
+                              type="button"
+                              onClick={() => {
+                                if (active) {
+                                  setSelectedReasons(prev => prev.filter(r => r !== reason));
+                                } else {
+                                  setSelectedReasons(prev => [...prev, reason]);
+                                }
+                              }}
+                              className={`p-1.5 text-left rounded-lg border text-[9px] transition-all truncate ${
+                                active 
+                                  ? "bg-blue-600 text-white border-blue-600 shadow-sm" 
+                                  : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                              }`}
+                            >
+                              {reason}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-extrabold text-slate-500 uppercase">Aantekeningen / Opmerkingen (optioneel)</label>
+                      <textarea
+                        placeholder="Voeg specifieke aantekeningen toe die de AI moet begrijpen..."
+                        value={calibrationNotes}
+                        onChange={(e) => setCalibrationNotes(e.target.value)}
+                        className="w-full bg-slate-50/20 p-2.5 border border-slate-200 rounded-xl text-[11px] font-medium focus:ring-4 focus:ring-blue-150 focus:border-blue-500 outline-none h-14 resize-none"
+                      />
+                    </div>
+
+                    <button
+                      onClick={handleFeedModel}
+                      disabled={!userActualHours || isFeeding || images.length === 0}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-550 disabled:opacity-50 text-white text-[11px] font-extrabold uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                    >
+                      {isFeeding ? (
+                        <>
+                          <Loader2 size={12} className="animate-spin" />
+                          <span>Bezig met kalibreren...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={12} />
+                          <span>Dien in als Leermateriaal (Voed AI)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ) : (
               <motion.div 
@@ -1194,7 +1385,8 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
       </div>
 
       {/* AI Trainingscentrum Dashboard Block */}
-      <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-6">
+      {mode === 'training' && (
+        <div className="bg-white border border-slate-200 rounded-[2rem] p-6 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
@@ -1305,6 +1497,32 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
                               "{log.notes}"
                             </p>
                           )}
+
+                          {log.images && log.images.length > 0 && (
+                            <div className="mt-2.5 space-y-1">
+                              <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block">Gekoppelde Foto's ({log.images.length})</span>
+                              <div className="flex gap-1.5 overflow-x-auto py-0.5">
+                                {log.images.map((imgUrl, i) => (
+                                  <div 
+                                    key={i} 
+                                    className="w-10 h-10 rounded-lg border overflow-hidden shrink-0 bg-white cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all shadow-sm"
+                                    onClick={() => setSelectedZoomLogImage(imgUrl)}
+                                  >
+                                    <img src={imgUrl} referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {log.calculationText && (
+                            <div className="mt-2 text-[10px] space-y-1">
+                              <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-widest block">Gekoppelde Eindcalculatie</span>
+                              <div className="bg-white px-2 py-1.5 border border-slate-150 rounded-lg text-[9px] font-mono leading-relaxed text-slate-600 max-h-16 overflow-y-auto whitespace-pre-wrap max-w-xl shadow-inner font-medium">
+                                {log.calculationText}
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-4 shrink-0 self-end sm:self-center">
@@ -1341,6 +1559,7 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
           )}
         </AnimatePresence>
       </div>
+      )}
 
       {/* Image zoom Modal */}
       <AnimatePresence>
@@ -1432,6 +1651,45 @@ ${analysisResult.technical_tips.map(tip => `- ${tip}`).join("\n")}
                   )}
                 </div>
                 <div className="text-[10px] text-slate-400 font-extrabold uppercase select-none">CarVerify Safeguard Pro</div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Simple logged image zoom modal */}
+      <AnimatePresence>
+        {selectedZoomLogImage && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedZoomLogImage(null)}
+              className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative max-w-4xl max-h-[90vh] z-10 rounded-[2rem] overflow-hidden bg-white border shadow-2xl flex flex-col"
+            >
+              <div className="p-4 bg-slate-50 border-b flex items-center justify-between">
+                <span className="text-xs font-black uppercase text-slate-800">📸 Gekalibreerd Leermateriaal Detail</span>
+                <button 
+                  onClick={() => setSelectedZoomLogImage(null)}
+                  className="p-1 px-2.5 bg-slate-200 hover:bg-slate-300 text-slate-705 font-bold rounded-lg text-xs"
+                >
+                  Sluiten
+                </button>
+              </div>
+              <div className="p-4 bg-slate-900 overflow-auto flex items-center justify-center min-h-[300px]">
+                <img 
+                  src={selectedZoomLogImage} 
+                  className="max-w-full max-h-[70vh] object-contain rounded-xl border border-slate-800"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             </motion.div>
           </div>

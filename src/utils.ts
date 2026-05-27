@@ -290,3 +290,70 @@ export function formatCalculationText(text: string): string {
   
   return result.join('\n');
 }
+
+export interface CalibrationAlignmentResult {
+  needsCalibration: boolean;
+  needsAlignment: boolean;
+  calibrationReason: string | null;
+  alignmentReason: string | null;
+}
+
+export function detectCalibrationAndAlignment(text: string): CalibrationAlignmentResult {
+  if (!text) {
+    return {
+      needsCalibration: false,
+      needsAlignment: false,
+      calibrationReason: null,
+      alignmentReason: null
+    };
+  }
+
+  const lines = text.split('\n');
+  let needsCalibration = false;
+  let needsAlignment = false;
+  let calibrationReason: string | null = null;
+  let alignmentReason: string | null = null;
+
+  // Keyword check lists (case-insensitive sub-string match)
+  const calibKeywords = [
+    "kalibr", "calibr", "inler", "adas", "aiming", "camera afstellen", "radar afst", 
+    "camera afstel", "sensor afst", "spoorassistent", "d.a.s.", "das-sensor", "blind spot in"
+  ];
+
+  const alignKeywords = [
+    "uitlijn", "uit-lijn", "wieluitlijn", "wielen uit", "stuurgeometrie", "spoor afst", 
+    "achteras meten", "vooras meten", "sporing", "wielstanden", "meetrapport"
+  ];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const lower = trimmed.toLowerCase();
+
+    // Check calibration
+    if (!needsCalibration) {
+      const match = calibKeywords.some(kw => lower.includes(kw));
+      if (match) {
+        needsCalibration = true;
+        calibrationReason = trimmed;
+      }
+    }
+
+    // Check alignment
+    if (!needsAlignment) {
+      const match = alignKeywords.some(kw => lower.includes(kw));
+      if (match) {
+        needsAlignment = true;
+        alignmentReason = trimmed;
+      }
+    }
+  }
+
+  return {
+    needsCalibration,
+    needsAlignment,
+    calibrationReason,
+    alignmentReason
+  };
+}
+

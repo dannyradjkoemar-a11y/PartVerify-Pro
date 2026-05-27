@@ -38,7 +38,8 @@ import {
   HelpCircle,
   QrCode,
   Strikethrough,
-  Camera
+  Camera,
+  GraduationCap
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -51,7 +52,8 @@ import {
   normalizePartNumber, 
   AutomotivePart,
   descriptionsMatch,
-  formatCalculationText
+  formatCalculationText,
+  detectCalibrationAndAlignment
 } from "./utils";
 import { BackdoorPanel } from "./components/BackdoorPanel";
 import { ManualModal } from "./components/ManualModal";
@@ -103,7 +105,7 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginStep, setLoginStep] = useState<'password' | 'tfa' | 'tfa-setup'>('password');
   const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
-  const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis'>('verification');
+  const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis' | 'training_center'>('verification');
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -134,6 +136,7 @@ export default function App() {
   const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
+  const [dimUnchanged, setDimUnchanged] = useState(false);
 
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
@@ -152,7 +155,7 @@ export default function App() {
 
   // Secure photo analysis tab tab-switching safety check limit to admin only
   useEffect(() => {
-    if (userProfile && userProfile.role !== "admin" && dashboardTab === "photo_analysis") {
+    if (userProfile && userProfile.role !== "admin" && (dashboardTab === "photo_analysis" || dashboardTab === "training_center")) {
       setDashboardTab("verification");
     }
   }, [userProfile, dashboardTab]);
@@ -1094,6 +1097,10 @@ export default function App() {
     return { matched, deviations, missing, approved, totalPriceDiff, totalVerifiedAmount };
   }, [results]);
 
+  const calibrationData = useMemo(() => {
+    return detectCalibrationAndAlignment(calcInput);
+  }, [calcInput]);
+
   const filteredResults = useMemo(() => {
     let base = results;
     if (!showRemoved) {
@@ -1803,10 +1810,10 @@ export default function App() {
 
             {/* Tab Selector Buttons - Only visible to admins */}
             {userProfile?.role === 'admin' && (
-              <div className="flex bg-slate-100 hover:bg-slate-100/80 p-1 rounded-2xl max-w-md shadow-inner select-none mb-6">
+              <div className="flex bg-slate-100 hover:bg-slate-100/80 p-1 rounded-2xl max-w-2xl shadow-inner select-none mb-6 gap-1 flex-wrap sm:flex-nowrap">
                 <button
                   onClick={() => setDashboardTab('verification')}
-                  className={`flex-1 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                     dashboardTab === 'verification'
                       ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
                       : 'text-slate-500 hover:text-slate-800'
@@ -1817,7 +1824,7 @@ export default function App() {
                 </button>
                 <button
                   onClick={() => setDashboardTab('photo_analysis')}
-                  className={`flex-1 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
                     dashboardTab === 'photo_analysis'
                       ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
                       : 'text-slate-500 hover:text-slate-800'
@@ -1825,6 +1832,17 @@ export default function App() {
                 >
                   <Camera size={14} />
                   <span>CarVerify Pro</span>
+                </button>
+                <button
+                  onClick={() => setDashboardTab('training_center')}
+                  className={`flex-1 py-2.5 px-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
+                    dashboardTab === 'training_center'
+                      ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <GraduationCap size={14} />
+                  <span>CarVerify Training Centre</span>
                 </button>
               </div>
             )}
@@ -1887,6 +1905,56 @@ export default function App() {
                   </div>
                   <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${stats.totalPriceDiff > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
                     <AlertCircle size={24} />
+                  </div>
+                </div>
+
+                {/* ADAS / Uitlijn Status Card */}
+                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4 group hover:border-blue-250 transition-all text-left">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Voertuigvereisten (uit calculatie)</p>
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Kalibreren & Uitlijnen</h4>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    {/* Calibration Item */}
+                    <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-slate-50/70 border border-slate-100 transition-all hover:bg-slate-100/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${calibrationData.needsCalibration ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`} />
+                          Kalibreren (ADAS)
+                        </span>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${calibrationData.needsCalibration ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-200 text-slate-500'}`}>
+                          {calibrationData.needsCalibration ? 'Ja, Vereist' : 'Nee'}
+                        </span>
+                      </div>
+                      {calibrationData.needsCalibration && calibrationData.calibrationReason ? (
+                        <span className="text-[9px] font-mono px-2 py-1 bg-blue-50/50 text-blue-700 rounded-lg border border-blue-100/30 truncate max-w-full block font-medium" title={calibrationData.calibrationReason}>
+                          🔍 {calibrationData.calibrationReason}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-slate-400 font-medium">Geen kalibratie-instructies aangetroffen</span>
+                      )}
+                    </div>
+
+                    {/* Alignment Item */}
+                    <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-slate-50/70 border border-slate-100 transition-all hover:bg-slate-100/50">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${calibrationData.needsAlignment ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
+                          Uitlijnen (Wielgeometrie)
+                        </span>
+                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${calibrationData.needsAlignment ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-200 text-slate-500'}`}>
+                          {calibrationData.needsAlignment ? 'Ja, Vereist' : 'Nee'}
+                        </span>
+                      </div>
+                      {calibrationData.needsAlignment && calibrationData.alignmentReason ? (
+                        <span className="text-[9px] font-mono px-2 py-1 bg-emerald-50/50 text-emerald-600 rounded-lg border border-emerald-100/30 truncate max-w-full block font-medium" title={calibrationData.alignmentReason}>
+                          📐 {calibrationData.alignmentReason}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] text-slate-400 font-medium">Geen uitlijn-instructies aangetroffen</span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1963,215 +2031,6 @@ export default function App() {
                 </div>
               </div>
             )}
-
-            {/* OPTION 3: Visuele Kosten Breakdown (Volledige breedte) - Terminal hacker theme */}
-            <div className="w-full bg-slate-950 rounded-3xl border border-slate-800 shadow-[0_4px_30px_rgba(0,0,0,0.4)] p-6 flex flex-col space-y-6 font-mono relative overflow-hidden">
-              {/* Scanline grid texture overlay for visual depth */}
-              <div className="absolute inset-0 bg-[linear-gradient(rgba(18,24,38,0)_95%,rgba(0,190,255,0.015)_95%)] bg-[size:100%_24px] pointer-events-none" />
-              
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3 relative z-10">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-2.5 w-2.5 relative">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-500"></span>
-                  </span>
-                  <div className="flex flex-col text-left">
-                    <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest font-mono">[PV-PRO_TELEM_V2.6]</span>
-                    <h3 className="text-sm font-black tracking-tight text-slate-100 uppercase">Visuele Kosten & Besparings Analyse</h3>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] text-cyan-400 bg-cyan-950/50 border border-cyan-800/50 px-2.5 py-1 rounded-md animate-pulse uppercase tracking-wider font-extrabold shadow-[0_0_10px_rgba(34,211,238,0.1)]">
-                    RECONCILER: ACTIVE
-                  </span>
-                </div>
-              </div>
-
-              {results.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 flex-1 text-left relative z-10">
-                  {/* Progress representation */}
-                  <div className="space-y-5">
-                    <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                      <span className="text-cyan-500 font-bold text-xs">&gt;_</span>
-                      <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">FINANCIAL_CORE_METRICS</h4>
-                    </div>
-                    
-                    <div className="space-y-4">
-                      {/* Calculations sum bar */}
-                      <div>
-                        <div className="flex justify-between text-xs text-slate-400 mb-1.5">
-                          <span>[SYS_CALC_REF] Berekende onderdelen:</span>
-                          <span className="font-extrabold text-slate-200">
-                            € {results.reduce((sum, r) => sum + r.calc.price, 0).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        <div className="h-5 bg-slate-900 border border-slate-800/80 rounded px-1 flex items-center shadow-inner relative overflow-hidden">
-                          <div className="absolute right-2 text-[8px] text-slate-600 font-bold tracking-widest uppercase z-10">[M_TARGET_BASE]</div>
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: "100%" }}
-                            transition={{ duration: 0.8 }}
-                            className="h-2.5 rounded-sm bg-slate-800 border-r border-slate-700 shadow-[0_0_8px_rgba(100,116,139,0.2)]"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Verified Actual Price */}
-                      <div>
-                        <div className="flex justify-between text-xs text-slate-400 mb-1.5">
-                          <span>[SYS_ACTUAL_MATCH] Goedgekeurde som:</span>
-                          <span className="font-extrabold text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.15)]">
-                            € {stats.totalVerifiedAmount.toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                        {(() => {
-                          const percentage = Math.min(100, (stats.totalVerifiedAmount / Math.max(1, results.reduce((sum, r) => sum + r.calc.price, 0))) * 100);
-                          return (
-                            <div className="h-5 bg-slate-900 border border-slate-800/80 rounded px-1 flex items-center shadow-inner relative overflow-hidden">
-                              <div className="absolute right-2 text-[8px] text-cyan-400 font-black tracking-widest uppercase z-10">{percentage.toFixed(1)}% RATIO</div>
-                              <motion.div 
-                                initial={{ width: 0 }}
-                                animate={{ width: `${percentage}%` }}
-                                transition={{ duration: 0.8, delay: 0.2 }}
-                                className="h-2.5 rounded-sm bg-cyan-500 shadow-[0_0_12px_rgba(34,211,238,0.45)] border-r border-cyan-400"
-                              />
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-
-                    {/* Visual Difference Ring or Box */}
-                    {stats.totalPriceDiff <= 0 ? (
-                      <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-950/20 text-emerald-400 flex items-center justify-between transition-all shadow-[inset_0_0_15px_rgba(16,185,129,0.05),0_0_15px_rgba(16,185,129,0.05)]">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                            <h5 className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
-                              SYS_STATUS: IN_BUDGET ✓
-                            </h5>
-                          </div>
-                          <p className="text-[10px] text-slate-400 leading-relaxed font-bold">
-                            Dossier met succes reconciled. Kostenbesparing gedetecteerd.
-                          </p>
-                        </div>
-                        <div className="text-right pl-4">
-                          <div className="text-[9px] text-slate-500 font-semibold tracking-widest">DELTA_GAIN</div>
-                          <span className="text-lg font-black tracking-tight text-emerald-400 select-all">
-                            -€ {Math.abs(stats.totalPriceDiff).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-4 rounded-xl border border-rose-500/30 bg-rose-950/20 text-rose-400 flex items-center justify-between transition-all shadow-[inset_0_0_15px_rgba(244,63,94,0.05),0_0_15px_rgba(244,63,94,0.05)]">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
-                            <h5 className="text-[10px] font-black uppercase tracking-wider text-rose-400">
-                              SYS_STATUS: OVER_BUDGET ⚠
-                            </h5>
-                          </div>
-                          <p className="text-[10px] text-slate-400 leading-relaxed font-bold">
-                            Afwijkend bedrag gedetecteerd. Vereist beheerderstoestemming.
-                          </p>
-                        </div>
-                        <div className="text-right pl-4">
-                          <div className="text-[9px] text-slate-500 font-semibold tracking-widest">DELTA_LOSS</div>
-                          <span className="text-lg font-black tracking-tight text-rose-400 select-all">
-                            +€ {Math.abs(stats.totalPriceDiff).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Breakdown distribution percentages */}
-                  <div className="space-y-5 flex flex-col justify-between">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-1.5 border-b border-slate-900 pb-2">
-                        <span className="text-cyan-500 font-bold text-xs">&gt;_</span>
-                        <h4 className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">RULE_FLOW_DISTRIBUTION</h4>
-                      </div>
-                      
-                      <div className="flex h-6 rounded overflow-hidden border border-slate-850 shadow-inner bg-slate-900 p-[2px]">
-                        {stats.matched > 0 && (
-                          <div 
-                            style={{ width: `${(stats.matched / results.length) * 100}%` }} 
-                            className="bg-emerald-500/80 hover:bg-emerald-400 border border-emerald-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
-                            title={`Matched OK: ${stats.matched}`}
-                          >
-                            {Math.round((stats.matched / results.length) * 100)}%
-                          </div>
-                        )}
-                        {stats.approved > 0 && (
-                          <div 
-                            style={{ width: `${(stats.approved / results.length) * 100}%` }} 
-                            className="bg-amber-500/80 hover:bg-amber-400 border border-amber-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
-                            title={`Handmatig: ${stats.approved}`}
-                          >
-                            {Math.round((stats.approved / results.length) * 100)}%
-                          </div>
-                        )}
-                        {stats.deviations > 0 && (
-                          <div 
-                            style={{ width: `${(stats.deviations / results.length) * 100}%` }} 
-                            className="bg-rose-500/80 hover:bg-rose-400 border border-rose-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
-                            title={`Verschil: ${stats.deviations}`}
-                          >
-                            {Math.round((stats.deviations / results.length) * 100)}%
-                          </div>
-                        )}
-                        {stats.missing > 0 && (
-                          <div 
-                            style={{ width: `${(stats.missing / results.length) * 100}%` }} 
-                            className="bg-pink-500/80 hover:bg-pink-400 border border-pink-500/10 h-full text-center flex items-center justify-center text-[9px] text-slate-950 font-black transition-all cursor-crosshair"
-                            title={`Ontbrekend: ${stats.missing}`}
-                          >
-                            {Math.round((stats.missing / results.length) * 100)}%
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/40 rounded-xl p-4 border border-slate-850 flex-1 flex flex-col justify-center space-y-2 font-mono">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-400 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-sm bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" />
-                          MATCHED_OK
-                        </span>
-                        <span className="font-extrabold text-slate-200">{stats.matched} regels</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-400 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-sm bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.5)]" />
-                          PRICE_MISMATCH
-                        </span>
-                        <span className="font-extrabold text-rose-400">{stats.deviations} regels</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-400 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-sm bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.5)]" />
-                          MANUAL_OVERRIDES
-                        </span>
-                        <span className="font-extrabold text-amber-500">{stats.approved} regels</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center border border-dashed border-slate-850 bg-slate-950/40 rounded-3xl text-slate-500 space-y-4 relative z-10">
-                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 animate-pulse">
-                    <Activity size={24} className="text-cyan-500" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black uppercase text-cyan-400 tracking-widest">[ANALYSIS_PORT_IDLE]</h4>
-                    <p className="text-[10px] text-slate-400 max-w-sm mx-auto leading-relaxed mt-1">
-                      Wachten op syntactische inputstream. Plak calculatie- en inkoopfactuurgegevens in de bovenstaande buffers om de diagnostische telemetry-matrix te initialiseren.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
 
 
 
@@ -2261,7 +2120,7 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-4 border-t border-slate-50">
-                  <div className="flex items-center gap-6">
+                  <div className="flex flex-wrap items-center gap-6">
                     <label className="flex items-center gap-2 cursor-pointer group">
                       <div className="relative inline-flex items-center">
                         <input 
@@ -2273,6 +2132,22 @@ export default function App() {
                         <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
                       </div>
                       <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors uppercase tracking-tight">Verwijderde regels tonen</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className="relative inline-flex items-center">
+                        <input 
+                          type="checkbox" 
+                          checked={dimUnchanged} 
+                          onChange={(e) => setDimUnchanged(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors uppercase tracking-tight flex items-center gap-1.5">
+                        <span>Correcte delen verdonkeren</span>
+                        <span className="px-1.5 py-0.5 text-[8px] font-black bg-blue-50 text-blue-605 rounded uppercase tracking-wider">Focus</span>
+                      </span>
                     </label>
                   </div>
 
@@ -2323,14 +2198,23 @@ export default function App() {
                   <tbody className="divide-y divide-slate-100">
                     <AnimatePresence mode="popLayout">
                       {filteredResults.length > 0 ? (
-                        filteredResults.map((res, i) => (
-                          <motion.tr 
-                            key={res.calc.id + i}
-                            initial={{ opacity: 0, x: -10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: i * 0.02 }}
-                            className={`group hover:bg-slate-50/80 transition-all ${res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''} ${struckThroughIds.has(res.calc.id) ? 'opacity-40 grayscale bg-slate-50/30' : ''}`}
-                          >
+                        filteredResults.map((res, i) => {
+                          const isUnchanged = res.status === 'matched' || res.status === 'approved';
+                          const shouldDim = dimUnchanged && isUnchanged;
+                          return (
+                            <motion.tr 
+                              key={res.calc.id + i}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.02 }}
+                              className={`group hover:bg-slate-50/80 transition-all ${
+                                res.status === 'removed' ? 'opacity-40 grayscale bg-slate-50/50' : ''
+                              } ${
+                                struckThroughIds.has(res.calc.id) ? 'opacity-40 grayscale bg-slate-50/30' : ''
+                              } ${
+                                shouldDim ? 'opacity-[0.14] grayscale saturate-0 contrast-75 hover:opacity-100 hover:grayscale-0 hover:saturate-100 hover:contrast-100 focus-within:opacity-100 focus-within:grayscale-0 transition-all duration-300' : ''
+                              }`}
+                            >
                             <td className="px-4 py-4">
                               {(res.status === 'removed' || res.status === 'approved') && (
                                 <button 
@@ -2597,7 +2481,8 @@ export default function App() {
                               </button>
                             </td>
                           </motion.tr>
-                        ))
+                        );
+                      })
                       ) : (
                         <tr>
                           <td colSpan={9} className="px-6 py-20 text-center">
@@ -2620,16 +2505,31 @@ export default function App() {
             </div>
           </>
         ) : userProfile?.role === "admin" ? (
-          <PhotoAnalysisTab 
-            licensePlate={licensePlate}
-            vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
-            onApplySuggestedAE={(ae) => {
-              setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
-            }}
-            db={db}
-            userId={user?.uid}
-            calcInput={calcInput}
-          />
+          dashboardTab === 'photo_analysis' ? (
+            <PhotoAnalysisTab 
+              mode="analysis"
+              licensePlate={licensePlate}
+              vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
+              onApplySuggestedAE={(ae) => {
+                setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
+              }}
+              db={db}
+              userId={user?.uid}
+              calcInput={calcInput}
+            />
+          ) : (
+            <PhotoAnalysisTab 
+              mode="training"
+              licensePlate={licensePlate}
+              vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
+              onApplySuggestedAE={(ae) => {
+                setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
+              }}
+              db={db}
+              userId={user?.uid}
+              calcInput={calcInput}
+            />
+          )
         ) : (
           <div className="p-8 text-center text-rose-600 bg-rose-50 border border-rose-100 rounded-3xl font-bold">
             U heeft geen toegang tot CarVerify Pro. Neem contact op met Danny.
