@@ -53,11 +53,13 @@ import {
   AutomotivePart,
   descriptionsMatch,
   formatCalculationText,
-  detectCalibrationAndAlignment
+  detectCalibrationAndAlignment,
+  scanAudatexCodes
 } from "./utils";
 import { BackdoorPanel } from "./components/BackdoorPanel";
 import { ManualModal } from "./components/ManualModal";
 import { PhotoAnalysisTab } from "./components/PhotoAnalysisTab";
+import { AudatexCodesModal } from "./components/AudatexCodesModal";
 
 import { initializeApp } from "firebase/app";
 import { 
@@ -137,6 +139,7 @@ export default function App() {
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
   const [dimUnchanged, setDimUnchanged] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing'>('all');
 
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
@@ -144,6 +147,7 @@ export default function App() {
   const [lastExtractedText, setLastExtractedText] = useState("");
   const [isBackdoorOpen, setIsBackdoorOpen] = useState(false);
   const [isManualOpen, setIsManualOpen] = useState(false);
+  const [isAudatexCodesOpen, setIsAudatexCodesOpen] = useState(false);
   const [logoClickCount, setLogoClickCount] = useState(0);
 
   // Set session persistence so closing tab / browser logs out user
@@ -777,10 +781,23 @@ export default function App() {
 
   // Fetch prices for selected client
   useEffect(() => {
-    if (selectedClientId) {
+    let activeId = selectedClientId;
+    
+    // Auto-detect or match if client name is saved instead of ID
+    if (activeId && clients.length > 0) {
+      const found = clients.find(c => c.id === activeId || c.name?.toLowerCase() === activeId.toLowerCase());
+      if (found) {
+        activeId = found.id;
+        if (selectedClientId !== found.id) {
+          setSelectedClientId(found.id);
+        }
+      }
+    }
+
+    if (activeId) {
       const loadPrices = async () => {
         try {
-          const snapshot = await getDocs(collection(db, "clients", selectedClientId, "prices"));
+          const snapshot = await getDocs(collection(db, "clients", activeId, "prices"));
           const prices: any[] = [];
           snapshot.docs.forEach(d => {
             const data = d.data();
@@ -793,14 +810,14 @@ export default function App() {
           });
           setClientPrices(prices);
         } catch (err) {
-          handleFirestoreError(err, 'get', `clients/${selectedClientId}/prices`);
+          handleFirestoreError(err, 'get', `clients/${activeId}/prices`);
         }
       };
       loadPrices();
     } else {
       setClientPrices([]);
     }
-  }, [selectedClientId]);
+  }, [selectedClientId, clients]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1025,40 +1042,64 @@ export default function App() {
         descriptionsMatch(calcPart.description, invPart.description)
       ) : null;
 
-      const kentekenSynonyms = ["kentekenplaat", "license plate", "number plate", "kenteken"];
+      const calcLower = calcPart.description.toLowerCase();
+      const calcPartNoClean = calcPart.partNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase();
+      const calcDigits = calcPart.partNumber.replace(/[^0-9]/g, "");
+
       const matchingClientPriceItems = Array.isArray(clientPrices) ? clientPrices.filter(p => {
-        const pNorm = normalizePartNumber(p.partNumber || "");
-        
-        // Match 1: Exact normalized part number match
-        if (pNorm && pNorm === normalizedCalc) return true;
-        
-        // Match 2: Semantic description match between client pricing item and calculation part
-        if (p.description && descriptionsMatch(calcPart.description, p.description)) return true;
-        
-        // Match 3: If part has generic name/synonym like "kentekenplaat"
-        const calcLower = calcPart.description.toLowerCase();
-        const pLower = (p.description || "").toLowerCase();
-        const pNumLower = (p.partNumber || "").toLowerCase();
-        
-        if (kentekenSynonyms.some(s => calcLower.includes(s)) && (kentekenSynonyms.some(s => pLower.includes(s)) || kentekenSynonyms.some(s => pNumLower.includes(s)))) {
+        const pNumClean = (p.partNumber || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+        const pDescLower = (p.description || "").toLowerCase();
+        const pDigits = (p.partNumber || "").replace(/[^0-9]/g, "");
+
+        // Rule 1: Clean part number exact match or substring match (helps match "0707070707" with "0707070707 V")
+        if (pNumClean && calcPartNoClean) {
+          if (pNumClean === calcPartNoClean || pNumClean.includes(calcPartNoClean) || calcPartNoClean.includes(pNumClean)) {
+            return true;
+          }
+        }
+
+        // Rule 2: Digits match if they are at least 5 digits (such as standard "0707070707" for license plates)
+        if (pDigits.length >= 5 && calcDigits.length >= 5) {
+          if (pDigits === calcDigits || pDigits.includes(calcDigits) || calcDigits.includes(pDigits)) {
+            return true;
+          }
+        }
+
+        // Rule 3: Semantic description match
+        if (pDescLower && (
+          descriptionsMatch(calcPart.description, p.description) ||
+          calcLower.includes(pDescLower) ||
+          pDescLower.includes(calcLower)
+        )) {
           return true;
         }
 
-        // Match 4: Check if part number of client matches description semantically
-        if (p.partNumber && descriptionsMatch(calcPart.description, p.partNumber)) return true;
+        // Rule 4: Broad check for standard license plates (kentekens / nummerplaten)
+        const isCalcKenteken = calcLower.includes("kenteken") || calcLower.includes("license plate") || calcLower.includes("nummerplaat") || calcPartNoClean.includes("KENTEKEN") || calcPartNoClean.startsWith("0707070707");
+        const isClientKenteken = pDescLower.includes("kenteken") || pDescLower.includes("license plate") || pDescLower.includes("nummerplaat") || pNumClean.includes("KENTEKEN") || pNumClean.includes("0707070707");
         
+        if (isCalcKenteken && isClientKenteken) {
+          return true;
+        }
+
+        // Rule 5: Match if client part number is a keyword in calculation description
+        if (pNumClean && pNumClean.length >= 4 && calcLower.includes(pNumClean.toLowerCase())) {
+          return true;
+        }
+
         return false;
       }) : [];
 
       const matchingClientPriceItem = matchingClientPriceItems.find(p => Math.abs((Number(p.price) || 0) - calcPart.price) < 0.005) 
-        || matchingClientPriceItems[0];
+         || matchingClientPriceItems[0];
 
       const matchesClientPrice = matchingClientPriceItem && Math.abs((Number(matchingClientPriceItem.price) || 0) - calcPart.price) < 0.005 ? true : false;
       const matchingPriceClient = matchingClientPriceItem?.price;
 
+      const registeredClient = clients.find(c => c.id === selectedClientId || c.name?.toLowerCase() === selectedClientId?.toLowerCase());
       const virtualClientMatch = matchingPriceClient !== undefined ? {
         id: `CLIENT-${calcPart.id}`,
-        description: `Prijslijst: ${clients.find(c => c.id === selectedClientId)?.name || 'Opdrachtgever'}`,
+        description: `Prijslijst: ${registeredClient?.name || 'Opdrachtgever'}`,
         partNumber: calcPart.partNumber,
         price: matchingPriceClient
       } : null;
@@ -1131,10 +1172,17 @@ export default function App() {
     return detectCalibrationAndAlignment(calcInput);
   }, [calcInput]);
 
+  const detectedAudatexCodes = useMemo(() => {
+    return scanAudatexCodes(calcInput);
+  }, [calcInput]);
+
   const filteredResults = useMemo(() => {
     let base = results;
     if (!showRemoved) {
       base = base.filter(r => r.status !== 'removed');
+    }
+    if (statusFilter !== 'all') {
+      base = base.filter(r => r.status === statusFilter);
     }
     
     if (!searchQuery) return base;
@@ -1145,7 +1193,7 @@ export default function App() {
       r.calc.id.includes(q) ||
       (r.match?.description.toLowerCase().includes(q))
     );
-  }, [results, searchQuery, showRemoved]);
+  }, [results, searchQuery, showRemoved, statusFilter]);
 
   const handleResetAll = () => {
     setCalcInput("");
@@ -1161,6 +1209,7 @@ export default function App() {
     setCaseNumber("");
     setKmStand("");
     setChassisNumber("");
+    setStatusFilter('all');
   };
 
   const toggleRedPriceStrikethrough = (id: string) => {
@@ -1274,26 +1323,75 @@ export default function App() {
 
     doc.setFontSize(12);
     doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
     doc.text("Samenvatting:", 14, lineY + 9);
+    doc.setFont("helvetica", "normal");
 
     doc.setFontSize(10);
     doc.text(`Totaal aantal onderdelen: ${results.length}`, 14, lineY + 16);
     doc.setTextColor(16, 185, 129); // Emerald-600
-    doc.text(`Match OK: ${stats.matched}`, 14, lineY + 22);
+    doc.text(`Match OK: ${stats.matched}`, 14, lineY + 21);
     doc.setTextColor(245, 158, 11); // Amber-500
-    doc.text(`Handmatig Goedgekeurd: ${stats.approved}`, 14, lineY + 28);
+    doc.text(`Handmatig Goedgekeurd: ${stats.approved}`, 14, lineY + 26);
     doc.setTextColor(225, 29, 72); // Rose-600
-    doc.text(`Afwijkingen: ${stats.deviations}`, 14, lineY + 34);
+    doc.text(`Afwijkingen: ${stats.deviations}`, 14, lineY + 31);
     doc.setTextColor(244, 63, 94); // Rose-500
-    doc.text(`Ontbrekend: ${stats.missing}`, 14, lineY + 40);
+    doc.text(`Ontbrekend: ${stats.missing}`, 14, lineY + 36);
     
     doc.setTextColor(217, 119, 6); // Amber-600
     doc.setFontSize(11);
-    doc.text(`Totaal Prijsverschil: EUR ${stats.totalPriceDiff.toFixed(2)}`, 14, lineY + 49);
+    doc.text(`Totaal Prijsverschil: EUR ${stats.totalPriceDiff.toFixed(2)}`, 14, lineY + 44);
     
     doc.setTextColor(37, 99, 235); // Blue-600
     doc.setFont("helvetica", "bold");
-    doc.text(`TOTAAL GEVERIFIEERD BEDRAG: EUR ${stats.totalVerifiedAmount.toFixed(2)}`, 14, lineY + 55);
+    doc.text(`TOTAAL GEVERIFIEERD: EUR ${stats.totalVerifiedAmount.toFixed(2)}`, 14, lineY + 50);
+    doc.setFont("helvetica", "normal");
+
+    // Right side: Vehicle Requirements & Scanned Audatex Codes
+    doc.setFontSize(11);
+    doc.setTextColor(0);
+    doc.setFont("helvetica", "bold");
+    doc.text("Voertuigvereisten (Diagnose):", 110, lineY + 9);
+    doc.setFont("helvetica", "normal");
+    
+    doc.setFontSize(9);
+    doc.text(`Kalibreren (ADAS): ${calibrationData.needsCalibration ? 'JA, VEREIST' : 'NEE'}`, 110, lineY + 15);
+    if (calibrationData.needsCalibration && calibrationData.calibrationReason) {
+      doc.setFontSize(7.5);
+      doc.setTextColor(100);
+      doc.text(`* Trigger: ${calibrationData.calibrationReason.substring(0, 48)}`, 110, lineY + 19);
+      doc.setFontSize(9);
+      doc.setTextColor(0);
+    }
+    
+    doc.text(`Uitlijnen (Geometrie): ${calibrationData.needsAlignment ? 'JA, VEREIST' : 'NEE'}`, 110, lineY + 24);
+    if (calibrationData.needsAlignment && calibrationData.alignmentReason) {
+      doc.setFontSize(7.5);
+      doc.setTextColor(100);
+      const reasonPart = calibrationData.alignmentReason;
+      if (reasonPart.length > 48) {
+        doc.text(`* Trigger: ${reasonPart.substring(0, 48)}`, 110, lineY + 28);
+        doc.text(`  ${reasonPart.substring(48, 96)}`, 110, lineY + 31);
+      } else {
+        doc.text(`* Trigger: ${reasonPart}`, 110, lineY + 28);
+      }
+      doc.setFontSize(9);
+      doc.setTextColor(0);
+    }
+
+    const scannedCodes = scanAudatexCodes(calcInput);
+    if (scannedCodes.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.text(`Gedetecteerde Audatex Codes:`, 110, lineY + 37);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(80);
+      const codeStrList = scannedCodes.slice(0, 4).map(c => `${c.code}: ${c.description.substring(0, 20)}`).join(', ');
+      doc.text(scannedCodes.length > 4 ? `${codeStrList}...` : codeStrList, 110, lineY + 41);
+    }
+
+    // Reset general font settings
+    doc.setTextColor(0);
     doc.setFont("helvetica", "normal");
 
     // Table
@@ -1708,6 +1806,7 @@ export default function App() {
               <HelpCircle size={16} />
               Handleiding
             </button>
+
             <button 
               onClick={() => setView(view === 'settings' ? 'dashboard' : 'settings')}
               className={`p-2 rounded-lg transition-all ${view === 'settings' ? 'bg-blue-600 text-white shadow-lg shadow-blue-250' : 'text-slate-400 hover:text-blue-500 hover:bg-slate-50'}`}
@@ -1879,6 +1978,42 @@ export default function App() {
 
             {dashboardTab === 'verification' ? (
               <>
+                {/* Visual Alerts for Critical Requirements */}
+                {(calibrationData.needsCalibration || calibrationData.needsAlignment) && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-5 rounded-3xl bg-amber-50/70 border-2 border-amber-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 text-left mb-6"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-200/50 font-bold text-xl">
+                        ⚠️
+                      </div>
+                      <div className="space-y-1">
+                        <h4 className="font-black text-slate-800 text-sm uppercase tracking-tight">
+                          Vereiste Werkzaamheden Gedetecteerd!
+                        </h4>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          {calibrationData.needsCalibration && "• [ADAS KALIBRATIE] Vereist op basis van de ingevoerde calculatietekst of onderdelen. "}
+                          {calibrationData.needsAlignment && "• [WIELUITLIJNEN (CODE 74)] Vereist wegens wielophanging componenten (draagarm, fusee, wielnaaf, etc.) of expliciete uitlijn-code."}
+                        </p>
+                        <div className="flex flex-col md:flex-row gap-2 mt-2 pt-1">
+                          {calibrationData.needsCalibration && calibrationData.calibrationReason && (
+                            <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50/70 px-2 py-0.5 rounded border border-blue-100 max-w-max">
+                              Kalibratie: {calibrationData.calibrationReason}
+                            </span>
+                          )}
+                          {calibrationData.needsAlignment && calibrationData.alignmentReason && (
+                            <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-50/70 px-2 py-0.5 rounded border border-emerald-100 max-w-max">
+                              Uitlijnen: {calibrationData.alignmentReason}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Inputs - Side-by-side and placed directly at the top for immediate access */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <InputSection 
@@ -1986,42 +2121,76 @@ export default function App() {
                       )}
                     </div>
                   </div>
+
+                  {/* Scanned Audatex Codes List */}
+                  {detectedAudatexCodes.length > 0 && (
+                    <div className="pt-3 border-t border-slate-150">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Gedetecteerde Actieve Codes ({detectedAudatexCodes.length})</p>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+                        {detectedAudatexCodes.map((c, idx) => (
+                          <span 
+                            key={c.code + idx} 
+                            className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-lg bg-indigo-50/70 text-indigo-750 border border-indigo-100/40"
+                            title={c.description}
+                          >
+                            <span className="font-mono bg-indigo-600 text-white px-1 py-0.2 rounded text-[8px] font-extrabold">{c.code}</span>
+                            <span className="truncate max-w-[130px] font-medium">{c.description}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Status Breakdown Grid */}
-              <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
                 <StatsCard 
                   label="Totaal Regels" 
                   value={calculationParts.length} 
                   icon={<FileText className="text-blue-600" />} 
-                  color="bg-blue-50 text-blue-700" 
+                  color="bg-blue-50 text-blue-700"
+                  isActive={statusFilter === 'all'}
+                  isFilterable={true}
+                  onClick={() => setStatusFilter('all')}
                 />
                 <StatsCard 
                   label="Match OK" 
                   value={stats.matched} 
                   icon={<CheckCircle2 className="text-emerald-600" />} 
-                  color="bg-emerald-50 text-emerald-700" 
+                  color="bg-emerald-50 text-emerald-700"
+                  isActive={statusFilter === 'matched'}
+                  isFilterable={true}
+                  onClick={() => setStatusFilter(statusFilter === 'matched' ? 'all' : 'matched')}
                 />
                 <StatsCard 
                   label="Handmatig" 
                   value={stats.approved} 
                   icon={<ShieldCheck className="text-amber-600" />} 
-                  color="bg-amber-50 text-amber-700" 
+                  color="bg-amber-50 text-amber-700"
+                  isActive={statusFilter === 'approved'}
+                  isFilterable={true}
+                  onClick={() => setStatusFilter(statusFilter === 'approved' ? 'all' : 'approved')}
                 />
                 <StatsCard 
                   label="Afwijking" 
                   value={stats.deviations} 
                   icon={<AlertCircle className="text-rose-600" />} 
-                  color="bg-rose-50 text-rose-700" 
+                  color="bg-rose-50 text-rose-700"
+                  isActive={statusFilter === 'deviation'}
+                  isFilterable={true}
+                  onClick={() => setStatusFilter(statusFilter === 'deviation' ? 'all' : 'deviation')}
                 />
                 <StatsCard 
                   label="Ontbrekend" 
                   value={stats.missing} 
                   icon={<XCircle className="text-rose-600" />} 
-                  color="bg-rose-50 text-rose-700" 
+                  color="bg-rose-50 text-rose-700"
+                  isActive={statusFilter === 'missing'}
+                  isFilterable={true}
+                  onClick={() => setStatusFilter(statusFilter === 'missing' ? 'all' : 'missing')}
                 />
-                <div className="bg-slate-50 p-6 rounded-3xl border border-dashed border-slate-200 flex flex-col justify-center items-center text-center space-y-1">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-200 flex flex-col justify-center items-center text-center space-y-0.5">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Calculatie Bron</p>
                   <p className="text-xs font-bold text-slate-600">Automatisering Actief</p>
                 </div>
@@ -2123,9 +2292,21 @@ export default function App() {
                     </div>
                     <div>
                       <h2 className="text-lg font-bold leading-none">Verificatie Verslag</h2>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                        {filteredResults.length} Resultaten gevonden
-                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                          {filteredResults.length} Resultaten gevonden
+                        </p>
+                        {statusFilter !== 'all' && (
+                          <span 
+                            onClick={() => setStatusFilter('all')}
+                            className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider bg-orange-50 text-orange-600 px-2 py-0.5 rounded cursor-pointer hover:bg-orange-100 transition-colors border border-orange-100/50"
+                            title="Filter wissen"
+                          >
+                            <span>Filter: {statusFilter === 'matched' ? 'Match OK' : statusFilter === 'approved' ? 'Handmatig' : statusFilter === 'deviation' ? 'Afwijking' : 'Ontbrekend'}</span>
+                            <span className="font-mono text-[9px]">×</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   
@@ -2229,7 +2410,8 @@ export default function App() {
                     <AnimatePresence mode="popLayout">
                       {filteredResults.length > 0 ? (
                         filteredResults.map((res, i) => {
-                          const isUnchanged = res.status === 'matched';
+                          const isCurrentlyEditing = editingCell?.startsWith(res.calc.id);
+                          const isUnchanged = res.status === 'matched' && !isCurrentlyEditing && res.manualPrice === undefined;
                           const shouldDim = dimUnchanged && isUnchanged;
                           return (
                             <motion.tr 
@@ -3046,6 +3228,15 @@ export default function App() {
           />
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {isAudatexCodesOpen && (
+          <AudatexCodesModal 
+            isOpen={isAudatexCodesOpen}
+            onClose={() => setIsAudatexCodesOpen(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -3665,18 +3856,46 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
     </motion.div>
   );
 }
-function StatsCard({ label, value, icon, color }: { label: string, value: string | number, icon: React.ReactNode, color: string }) {
+function StatsCard({ 
+  label, 
+  value, 
+  icon, 
+  color,
+  isActive = false,
+  isFilterable = false,
+  onClick
+}: { 
+  label: string, 
+  value: string | number, 
+  icon: React.ReactNode, 
+  color: string,
+  isActive?: boolean,
+  isFilterable?: boolean,
+  onClick?: () => void
+}) {
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`p-6 rounded-3xl border border-slate-200 shadow-sm flex items-start justify-between bg-white overflow-hidden relative group hover:border-slate-300 transition-all`}
+      onClick={isFilterable ? onClick : undefined}
+      className={`p-3.5 sm:p-4 rounded-2xl border transition-all ${
+        isActive 
+          ? 'border-blue-500 bg-blue-50/50 ring-2 ring-blue-500/10 shadow-sm' 
+          : 'border-slate-200 bg-white hover:border-slate-300 shadow-sm'
+      } flex items-start justify-between overflow-hidden relative group ${
+        isFilterable ? 'cursor-pointer select-none active:scale-98' : 'cursor-default'
+      }`}
     >
-      <div className="space-y-2">
-        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</p>
-        <h3 className="text-3xl font-black tracking-tighter">{value}</h3>
+      <div className="space-y-1">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <h3 className="text-xl sm:text-2xl font-black tracking-tight text-slate-800">{value}</h3>
+          {isActive && (
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-505 bg-blue-500 animate-pulse" />
+          )}
+        </div>
       </div>
-      <div className={`p-3 rounded-2xl ${color} transition-transform group-hover:scale-110 duration-500`}>
+      <div className={`p-2 rounded-xl text-xs ${color} transition-transform group-hover:scale-105 duration-300 shrink-0`}>
         {icon}
       </div>
     </motion.div>

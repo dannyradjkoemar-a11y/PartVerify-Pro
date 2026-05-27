@@ -325,6 +325,28 @@ export function detectCalibrationAndAlignment(text: string): CalibrationAlignmen
     "achteras meten", "vooras meten", "sporing", "wielstanden", "meetrapport"
   ];
 
+  // Suspension components which implicitly require alignment when modified/replaced
+  const suspensionKeywords = [
+    "draagarm", "velg", "stabilisator", "banden", "band ", "wielophanging", 
+    "schokdemper", "schokbreker", "wiellager", "wielnaaf", "fusee", "stuurstang", "achterveer"
+  ];
+
+  // Pre-check for specific Audatex codes anywhere in the document
+  const hasCode0018 = /\b0018\b/.test(text);
+  const hasCode74 = /\b74\b/.test(text) || /\b74\s+\d/.test(text) || text.toLowerCase().includes("code 74");
+
+  if (hasCode0018) {
+    needsCalibration = true;
+    calibrationReason = "Opgevoerd in calculatie (Audatex Code 0018 - Kalibratie)";
+    needsAlignment = true;
+    alignmentReason = "Opgevoerd in calculatie (Audatex Code 0018 - Uitlijnen)";
+  }
+
+  if (hasCode74 && !needsAlignment) {
+    needsAlignment = true;
+    alignmentReason = "Opgevoerd in calculatie (Audatex Code 74 / Uitlijnen)";
+  }
+
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -347,6 +369,15 @@ export function detectCalibrationAndAlignment(text: string): CalibrationAlignmen
         alignmentReason = trimmed;
       }
     }
+
+    // Check suspension components (implicit requirement)
+    if (!needsAlignment) {
+      const foundSusp = suspensionKeywords.find(kw => lower.includes(kw));
+      if (foundSusp) {
+        needsAlignment = true;
+        alignmentReason = `Vereist wegens wielophanging: "${trimmed.substring(0, 48)}${trimmed.length > 48 ? '...' : ''}"`;
+      }
+    }
   }
 
   return {
@@ -356,4 +387,146 @@ export function detectCalibrationAndAlignment(text: string): CalibrationAlignmen
     alignmentReason
   };
 }
+
+// Structured short database for scanner to prevent circular import issues
+const SCAN_AUDATEX_CODES_LIST = [
+  { code: "BV AE", description: "Maakt van een V een B (Opgave, AE verplicht)" },
+  { code: "CV AE", description: "Maakt van een V een C (AE verplicht)" },
+  { code: "HV AE", description: "Maakt van een V een H (verplicht)" },
+  { code: "SVV AE", description: "Maakt van een V een S" },
+  { code: "S0", description: "Onderdrukken spuitwerk" },
+  { code: "SB", description: "Spuitwerk nog bruikbaar" },
+  { code: "SH1", description: "SH bij > 50% plamuuroppervlak" },
+  { code: "D", description: "Uitdeuken Zonder Spuiten (UZS)" },
+  { code: "LS", description: "Spot repair" },
+  { code: "SV1", description: "Onderdeel met grondlak -deel ruw, hechtlaag" },
+  { code: "SV2", description: "Onderdeel ruw met filler, zonder schuren" },
+  { code: "SV3", description: "Onderdeel ruw met filler, met schuren" },
+  { code: "SV4", description: "Onderdeel PUR ruw met filler, met schuren" },
+  { code: "MM", description: "Toeslag op onderdeel" },
+  { code: "WM", description: "Aftrek op onderdeel" },
+  { code: "PM", description: "Aftrek van onderdeel incl. extra delen" },
+  { code: "UM", description: "Toeslag op onderdeel incl. extra delen" },
+  { code: "GM", description: "Opgave spuitmateriaalvergoeding" },
+  { code: "HM", description: "Opgave reparatievergoeding" },
+  { code: "SM", description: "Opgave spuitloonvergoeding" },
+  { code: "VM", description: "Mutatie onderdeelprijs" },
+  { code: "BM", description: "Onderdeelprijs mutatie onderdeelnummer zichtbaar" },
+  { code: "NP", description: "Prijsmutatie per hoeveelheid" },
+  { code: "FO", description: "Onderdeelprijs onderdrukken" },
+  { code: "TM", description: "Type Mutatie" },
+  { code: "NR", description: "Hoeveelheid mutatie" },
+  { code: "PW", description: "Afwijkend BTW percentage per onderdeel" },
+  { code: "PZ", description: "Onderdeel zonder korting toeslag TZC 122" },
+  { code: "AM", description: "Bedrag aftrek NVO spuitwerk" },
+  { code: "QM", description: "Mutatie oppervlakte" },
+  { code: "10", description: "Totaalbedrag onderdelen (met specificatie)" },
+  { code: "13", description: "Aftrek prijs nog bruikbare delen" },
+  { code: "14", description: "Aftrek prijs nog bruikbare delen, carrosserie" },
+  { code: "20", description: "Korting op totaalbedrag onderdelen" },
+  { code: "21", description: "Toeslag op totaalbedrag onderdelen" },
+  { code: "22", description: "Korting over alle onderdelen" },
+  { code: "23", description: "Toeslag over alle onderdelen" },
+  { code: "24", description: "Aftrek NVO van totaalbedrag" },
+  { code: "26", description: "Kleinmateriaal ondergrens" },
+  { code: "27", description: "Totaalbedrag kleinmateriaal" },
+  { code: "28", description: "Kleinmateriaal van onderdelenbedrag" },
+  { code: "29", description: "Kleinmateriaal van arbeidsloonbedrag" },
+  { code: "92", description: "Kleinmateriaal van reparatiekosten" },
+  { code: "93", description: "Kleinmateriaal bovengrens" },
+  { code: "120", description: "Aftrek of toeslag onderdelen incl. kleinmateriaal" },
+  { code: "121", description: "Aftrek NVO totaalbedrag onderdelen, incl. kleinmateriaal" },
+  { code: "122", description: "Korting of toeslag totaalbedrag onderdelen" },
+  { code: "30", description: "Totaalbedrag arbeidsloon (met specificatie)" },
+  { code: "31", description: "Totale arbeidsduur (met specificatie)" },
+  { code: "32", description: "Bijzondere verrichting" },
+  { code: "33", description: "Aftrek op arbeidsloon" },
+  { code: "34", description: "Aftrek van arbeidsduur" },
+  { code: "38", description: "Toeslag op arbeidsloon" },
+  { code: "52", description: "Totaalbedrag spuitloon" },
+  { code: "54", description: "Totale spuitduur met specificatie" },
+  { code: "55", description: "Totaalbedrag spuitloon met specificatie" },
+  { code: "56", description: "Aftrek NVO van totaalbedrag spuitwerk" },
+  { code: "58", description: "Aftrek NVO van totaalbedrag spuitwerk (%)" },
+  { code: "59", description: "Aftrek spuitloonbedrag" },
+  { code: "75", description: "Toeslag op spuitloon" },
+  { code: "82", description: "Spuitbedrag overig" },
+  { code: "143", description: "Aftrek/Toeslag spuitbedrag" },
+  { code: "40", description: "Spuitmateriaal toeslag als % van spuitloon" },
+  { code: "42", description: "Spuitmateriaalbedrag" },
+  { code: "45", description: "Bedrag per dm2" },
+  { code: "51", description: "AZT spuitsysteem (%)" },
+  { code: "81", description: "Fabrieksspuitsysteem" },
+  { code: "110", description: "Toeslag spuitmateriaal" },
+  { code: "111", description: "Aftrek spuitmateriaal" },
+  { code: "112", description: "Aftrek NVO van spuitmateriaal" },
+  { code: "02", description: "Wijziging BTW" },
+  { code: "76", description: "Milieutoeslag als % van onderdelen" },
+  { code: "77", description: "Milieutoeslag als vast bedrag" },
+  { code: "80", description: "Milieutoeslag arbeids- en spuitloon" },
+  { code: "88", description: "Aftrek reparatiekosten" },
+  { code: "89", description: "Aftrek reparatiekosten (vast bedrag)" },
+  { code: "90", description: "Begrotingskosten reparateur (AE)" },
+  { code: "91", description: "Aftrek eigen risico" },
+  { code: "95", description: "Aftrek eerste schade" },
+  { code: "123", description: "Milieutoeslag KL 1-4 (arbeids- en spuitloon)" },
+  { code: "124", description: "Milieutoeslag KL 5 (arbeidsloon van UZS)" },
+  { code: "125", description: "Milieutoeslag als % van reparatiekosten" },
+  { code: "126", description: "Milieutoeslag als bovengrens van reparatiekosten" },
+  { code: "60", description: "Transportkosten onderdelen" },
+  { code: "61", description: "Transportkosten carrosserie/cabine" },
+  { code: "63", description: "Hulpstoffen" },
+  { code: "65", description: "Bekledingswerkzaamheden" },
+  { code: "66", description: "Lijm- en kitmateriaal" },
+  { code: "67", description: "Poetsen/reinigen" },
+  { code: "68", description: "Voertuigtransport" },
+  { code: "69", description: "Noodreparatie" },
+  { code: "70", description: "Anti-roestbehandeling" },
+  { code: "71", description: "Anti-roestbehandeling carrosserie" },
+  { code: "72", description: "Bescherming holle ruimte" },
+  { code: "73", description: "Bescherming holle ruimte carrosserie" },
+  { code: "74", description: "Uitlijnen wielen (Geometrie)" },
+  { code: "135", description: "Kosten Vervangend Vervoer" },
+  { code: "136", description: "Kosten Vervangend Vervoer" },
+  { code: "0016", description: "Foutgeheugen uitlezen vóór reparatie" },
+  { code: "0017", description: "Foutgeheugen uitlezen ná reparatie" },
+  { code: "0018", description: "Gezamenlijk Uitlijnen & ADAS Kalibratie" }
+];
+
+export interface ScannedCodeResult {
+  code: string;
+  description: string;
+}
+
+export function scanAudatexCodes(text: string): ScannedCodeResult[] {
+  if (!text) return [];
+  const results: ScannedCodeResult[] = [];
+  const seenCodes = new Set<string>();
+
+  for (const item of SCAN_AUDATEX_CODES_LIST) {
+    let matched = false;
+    
+    if (/^[A-Z]+\d*$/i.test(item.code)) {
+      const regex = new RegExp(`\\b${item.code}\\b`, 'i');
+      matched = regex.test(text);
+    } else if (/^\d+$/.test(item.code)) {
+      // Ensure digits match standalone numbers, e.g. /  74  or : 74 or " 74 "
+      const regex = new RegExp(`(?:\\s|^|/|:)${item.code}(?:\\s|$|/|\\.|,)`);
+      matched = regex.test(text);
+    } else {
+      // Handle cases with spaces like "BV AE"
+      const cleanPattern = item.code.replace(/\s+/g, '\\s+');
+      const regex = new RegExp(`\\b${cleanPattern}\\b`, 'i');
+      matched = regex.test(text);
+    }
+
+    if (matched && !seenCodes.has(item.code)) {
+      seenCodes.add(item.code);
+      results.push(item);
+    }
+  }
+
+  return results;
+}
+
 
