@@ -212,50 +212,26 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
     // We assume the part number is usually at the start of the line
     const match = trimmed.match(/^([A-Z0-9\s.-]{5,})\s+(.+?)(?:\s+\d+[,.]\d+)?\s+(?:€|(?:\d+[,.]\d{2}))/);
 
-    let partNumber = '';
-    let description = '';
-
     if (match) {
-      partNumber = match[1].trim();
-      description = match[2].trim();
+      parts.push({
+        id: '',
+        partNumber: match[1].trim(),
+        description: match[2].trim(),
+        price: maxPrice,
+        originalLine: trimmed
+      });
     } else {
       // More relaxed fallback for invoice lines
       const words = trimmed.split(/\s+/);
       if (words[0].length >= 4) {
-        partNumber = words[0];
-        description = words.slice(1).join(' ').split(/\d+[,.]\d+/)[0].trim();
+        parts.push({
+          id: '',
+          partNumber: words[0],
+          description: words.slice(1).join(' ').split(/\d+[,.]\d+/)[0].trim(),
+          price: maxPrice,
+          originalLine: trimmed
+        });
       }
-    }
-
-    if (partNumber) {
-      let finalPrice = maxPrice;
-
-      // Smart quantity price calculation to handle discounted lines
-      // We look for a quantity and a unit price in the invoice line
-      // E.g. "4,0 € 3,23" -> Group 1 is "4,0", Group 2 is "3,23"
-      // We exclude tax rate (21,00 %) by asserting the price is not followed by '%'
-      const qtyPriceMatch = trimmed.match(/\s(\d+(?:[,.]\d+)?)\s*(?:pcs|st|stk|stuks|x)?\s*(?:€\s*)?(\d+[,.]\d{2})(?!\s*%)(?:\b|\s)/i);
-      if (qtyPriceMatch) {
-        const qty = parseFloat(qtyPriceMatch[1].replace(',', '.'));
-        const unitPrice = parseFloat(qtyPriceMatch[2].replace(',', '.'));
-        
-        if (!isNaN(qty) && !isNaN(unitPrice) && qty > 0 && unitPrice > 0 && qty < 100) {
-          const calculatedPrice = qty * unitPrice;
-          // Prefer calculated price over discounted net finalPrice if quantity is greater than 1
-          // or if the calculated gross price is higher than the maxPrice (which is the discounted price)
-          if (qty > 1 || calculatedPrice > finalPrice) {
-            finalPrice = Number(calculatedPrice.toFixed(2));
-          }
-        }
-      }
-
-      parts.push({
-        id: '',
-        partNumber: partNumber,
-        description: description,
-        price: finalPrice,
-        originalLine: trimmed
-      });
     }
   }
   return parts;

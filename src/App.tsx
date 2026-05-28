@@ -1154,28 +1154,7 @@ export default function App() {
       };
     });
 
-    // Find all invoice parts not matched by any calculation part
-    const extraInvoiceResults = invoiceParts
-      .filter(invPart => !matchedInvoiceIds.has(invPart.id))
-      .map((invPart, index) => {
-        const calcPart: AutomotivePart = {
-          id: `EXT-${1000 + index}`,
-          description: "(Niet in calculatie)",
-          partNumber: invPart.partNumber,
-          price: 0
-        };
-
-        return {
-          calc: calcPart,
-          match: invPart,
-          status: 'extra' as const,
-          priceDiff: invPart.price, // Entire invoice price is considered excess/difference
-          isSemantic: false,
-          manualPrice: undefined
-        };
-      });
-
-    const combinedResults = [...allResults, ...extraInvoiceResults];
+    const combinedResults = allResults;
 
     // Custom sorting: OK -> Deviation -> Extra -> Missing -> Approved (Manual) -> Removed
     const statusOrder = {
