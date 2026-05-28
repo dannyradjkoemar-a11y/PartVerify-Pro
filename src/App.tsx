@@ -145,7 +145,7 @@ export default function App() {
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
   const [dimUnchanged, setDimUnchanged] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing' | 'extra'>('all');
 
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
@@ -1034,6 +1034,7 @@ export default function App() {
     if (calculationParts.length === 0 && manualParts.length === 0) return [];
 
     const combined = [...calculationParts, ...manualParts];
+    const matchedInvoiceIds = new Set<string>();
 
     const allResults = combined.map(calcPart => {
       const normalizedCalc = normalizePartNumber(calcPart.partNumber);
@@ -1112,6 +1113,12 @@ export default function App() {
 
       const finalMatch = match || semanticMatch || virtualClientMatch;
 
+      // Track matched invoice parts
+      const realMatch = match || semanticMatch;
+      if (realMatch && realMatch.id) {
+        matchedInvoiceIds.add(realMatch.id);
+      }
+
       const overrideKey = `${calcPart.id}-${calcPart.partNumber}`;
       const manualPrice = manualOverrides[overrideKey];
 
@@ -1122,7 +1129,7 @@ export default function App() {
       // Handle floating point precision, ignore differences < 0.005
       const hasRealDiff = Math.abs(priceDiff) > 0.005;
 
-      let status: 'matched' | 'deviation' | 'missing' | 'approved' | 'removed' = 'missing';
+      let status: 'matched' | 'deviation' | 'missing' | 'approved' | 'removed' | 'extra' = 'missing';
       
       if (removedPartIds.has(calcPart.id)) {
         status = 'removed';
@@ -1147,16 +1154,40 @@ export default function App() {
       };
     });
 
-    // Custom sorting: OK -> Deviation -> Missing -> Approved (Manual) -> Removed
+    // Find all invoice parts not matched by any calculation part
+    const extraInvoiceResults = invoiceParts
+      .filter(invPart => !matchedInvoiceIds.has(invPart.id))
+      .map((invPart, index) => {
+        const calcPart: AutomotivePart = {
+          id: `EXT-${1000 + index}`,
+          description: "(Niet in calculatie)",
+          partNumber: invPart.partNumber,
+          price: 0
+        };
+
+        return {
+          calc: calcPart,
+          match: invPart,
+          status: 'extra' as const,
+          priceDiff: invPart.price, // Entire invoice price is considered excess/difference
+          isSemantic: false,
+          manualPrice: undefined
+        };
+      });
+
+    const combinedResults = [...allResults, ...extraInvoiceResults];
+
+    // Custom sorting: OK -> Deviation -> Extra -> Missing -> Approved (Manual) -> Removed
     const statusOrder = {
       'matched': 0,
       'deviation': 1,
-      'missing': 2,
-      'approved': 3,
-      'removed': 4
+      'extra': 2,
+      'missing': 3,
+      'approved': 4,
+      'removed': 5
     };
 
-    return allResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+    return combinedResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
   }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides, clientPrices, selectedClientId, clients]);
 
   const stats = useMemo(() => {
@@ -1164,14 +1195,17 @@ export default function App() {
     const deviations = results.filter(r => r.status === 'deviation').length;
     const missing = results.filter(r => r.status === 'missing').length;
     const approved = results.filter(r => r.status === 'approved').length;
-    const totalPriceDiff = results.reduce((acc, r) => acc + r.priceDiff, 0);
+    const extra = results.filter(r => r.status === 'extra').length;
+    const totalPriceDiff = results
+      .filter(r => r.status !== 'removed')
+      .reduce((acc, r) => acc + r.priceDiff, 0);
     
     // Sum of all "good" prices: manual overrides OR invoice matches
     const totalVerifiedAmount = results
       .filter(r => r.status !== 'removed' && r.status !== 'missing')
       .reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? 0), 0);
 
-    return { matched, deviations, missing, approved, totalPriceDiff, totalVerifiedAmount };
+    return { matched, deviations, missing, approved, extra, totalPriceDiff, totalVerifiedAmount };
   }, [results]);
 
   const calibrationData = useMemo(() => {
@@ -1775,82 +1809,191 @@ export default function App() {
     );
   }
 
-  const renderDossierBar = () => (
-    <div className="flex flex-col lg:flex-row gap-4 items-stretch mb-6">
-      <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
-        <div className="w-full">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
-          <div className="flex items-center gap-3">
-            <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-16 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
-              <div className="bg-[#0039AE] text-white text-[10px] w-10 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
-                <span className="text-[12px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
-                <span className="text-[13px] font-sans font-black tracking-normal leading-none select-none">NL</span>
+  const renderDossierBar = () => {
+    const isCalibMissing = calibrationData.needsCalibration && calibrationStatus === 'none';
+    const isAlignMissing = calibrationData.needsAlignment && alignmentStatus === 'none';
+
+    return (
+      <div className="flex flex-col lg:flex-row gap-4 items-stretch mb-6 animate-fade-in">
+        {/* Left Card: Inputs (Top) and ADAS Requirements alerts (Bottom) to fill the empty space */}
+        <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between gap-5">
+          {/* Inputs Section */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-start">
+            <div className="w-full">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
+              <div className="flex items-center gap-3">
+                <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-14 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+                  <div className="bg-[#0039AE] text-white text-[10px] w-8 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
+                    <span className="text-[10px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                    <span className="text-[11px] font-sans font-black tracking-normal leading-none select-none">NL</span>
+                  </div>
+                  
+                  <input 
+                    type="text"
+                    placeholder="AB-123-C"
+                    maxLength={11}
+                    className="w-full bg-transparent text-center text-lg md:text-xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20"
+                    value={licensePlate}
+                    onChange={(e) => setLicensePlate(e.target.value)}
+                  />
+                </div>
+                {licensePlate.replace(/[^a-zA-Z0-9]/g, '').length >= 6 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (vehicleData) {
+                        setShowRdwModal(true);
+                      }
+                    }}
+                    disabled={vehicleLoading}
+                    className={`h-14 px-3.5 rounded-2xl font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                      vehicleData 
+                        ? 'bg-yellow-300 text-slate-950 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
+                        : vehicleLoading 
+                        ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50' 
+                        : 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 hover:text-blue-700'
+                    }`}
+                    title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
+                  >
+                    <CarFront size={14} className={vehicleLoading ? "animate-spin text-blue-500" : "text-current"} />
+                    <span>{vehicleLoading ? 'Laden...' : 'RDW'}</span>
+                  </button>
+                )}
               </div>
-              
+            </div>
+
+            <div className="w-full">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Dossiernummer</label>
               <input 
                 type="text"
-                placeholder="AB-123-C"
-                maxLength={11}
-                className="w-full bg-transparent text-center text-xl md:text-2xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20"
-                value={licensePlate}
-                onChange={(e) => setLicensePlate(e.target.value)}
+                placeholder="Invoeren..."
+                className="w-full h-14 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-base font-black text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all placeholder:text-slate-300 shadow-sm"
+                value={caseNumber}
+                onChange={(e) => setCaseNumber(e.target.value)}
               />
             </div>
-            {licensePlate.replace(/[^a-zA-Z0-9]/g, '').length >= 6 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (vehicleData) {
-                    setShowRdwModal(true);
-                  }
-                }}
-                disabled={vehicleLoading}
-                className={`h-16 px-4 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
-                  vehicleData 
-                    ? 'bg-yellow-300 text-slate-150 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
-                    : vehicleLoading 
-                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50' 
-                    : 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 hover:text-blue-700'
-                }`}
-                title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
-              >
-                <CarFront size={14} className={vehicleLoading ? "animate-spin text-blue-500" : "text-current"} />
-                <span>{vehicleLoading ? 'Laden...' : 'RDW'}</span>
-              </button>
-            )}
+
+            <div className="w-full">
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Opdrachtgever</label>
+              <div className="relative">
+                <select 
+                  value={selectedClientId}
+                  onChange={(e) => setSelectedClientId(e.target.value)}
+                  className="w-full h-14 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-xs font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all appearance-none cursor-pointer pr-10 shadow-sm"
+                >
+                  <option value="">Geen / Standaard</option>
+                  {clients.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
+                  <Layers size={14} />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div className="w-full">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Dossiernummer</label>
-          <input 
-            type="text"
-            placeholder="Invoeren..."
-            className="w-full h-16 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all placeholder:text-slate-300 shadow-sm"
-            value={caseNumber}
-            onChange={(e) => setCaseNumber(e.target.value)}
-          />
-        </div>
+          {/* ADAS/Alignment Alerts Section (Fills the former empty space perfectly below) */}
+          <div className="border-t border-slate-100 pt-4 flex flex-col gap-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                Systeemvereisten (uit calculatie)
+              </span>
+              {(isCalibMissing || isAlignMissing) ? (
+                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-rose-50 border border-rose-100 text-rose-600 animate-pulse">
+                  ⚠️ Vereisten Ontbreken in checklist
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest bg-emerald-50 border border-emerald-100 text-emerald-600">
+                  ✓ Geen Ontbrekende ACTIES
+                </span>
+              )}
+            </div>
 
-        <div className="w-full">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Opdrachtgever</label>
-          <div className="relative">
-            <select 
-              value={selectedClientId}
-              onChange={(e) => setSelectedClientId(e.target.value)}
-              className="w-full h-16 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all appearance-none cursor-pointer pr-10 shadow-sm"
-            >
-              <option value="">Geen / Standaard</option>
-              {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
-              <Layers size={14} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Calibration Banner */}
+              <div className={`p-2.5 rounded-xl border transition-all flex items-start gap-2.5 min-h-[58px] ${
+                isCalibMissing 
+                  ? 'bg-rose-50/75 border-rose-200 text-rose-900 shadow-xs animate-pulse-slow' 
+                  : calibrationData.needsCalibration
+                  ? 'bg-emerald-50/50 border-emerald-100 text-emerald-900'
+                  : 'bg-slate-50 border-slate-100 text-slate-400'
+              }`}>
+                <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-white shadow-xs border border-transparent">
+                  {isCalibMissing ? (
+                    <AlertCircle size={14} className="text-rose-650 animate-bounce" />
+                  ) : calibrationData.needsCalibration ? (
+                    <CheckSquare size={14} className="text-emerald-600" />
+                  ) : (
+                    <Info size={14} className="text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-extrabold text-[10px] tracking-tight uppercase">ADAS KALIBRATIE</span>
+                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider leading-none ${
+                       isCalibMissing 
+                        ? 'bg-rose-200/50 text-rose-700 font-black' 
+                        : calibrationData.needsCalibration
+                        ? 'bg-emerald-100/50 text-emerald-800 animate-fade-in'
+                        : 'bg-slate-200 text-slate-550'
+                    }`}>
+                      {isCalibMissing ? 'ONTBREEKT' : calibrationData.needsCalibration ? 'OK' : 'NVT'}
+                    </span>
+                  </div>
+                  <p className="text-[9px] font-medium mt-1 leading-tight truncate text-slate-500" title={calibrationData.calibrationReason || undefined}>
+                    {isCalibMissing 
+                      ? `⚠️ Vereist: "${calibrationData.calibrationReason || 'Kalibratie code gedetecteerd'}"`
+                      : calibrationData.needsCalibration
+                      ? `✓ Ingediend in Checklist ("${calibrationData.calibrationReason || 'Kalibratie'}")`
+                      : 'Geen kalibratie vereist volgens calculatie.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Alignment Banner */}
+              <div className={`p-2.5 rounded-xl border transition-all flex items-start gap-2.5 min-h-[58px] ${
+                isAlignMissing 
+                  ? 'bg-rose-50/75 border-rose-200 text-rose-900 shadow-xs animate-pulse-slow' 
+                  : calibrationData.needsAlignment
+                  ? 'bg-emerald-50/50 border-emerald-100 text-emerald-900'
+                  : 'bg-slate-50 border-slate-100 text-slate-400'
+              }`}>
+                <div className="p-1.5 rounded-lg shrink-0 mt-0.5 bg-white shadow-xs border border-transparent">
+                  {isAlignMissing ? (
+                    <AlertCircle size={14} className="text-rose-650 animate-bounce" />
+                  ) : calibrationData.needsAlignment ? (
+                    <CheckSquare size={14} className="text-emerald-600" />
+                  ) : (
+                    <Info size={14} className="text-slate-400" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-extrabold text-[10px] tracking-tight uppercase">UITLIJNEN (GEOMETRIE)</span>
+                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider leading-none ${
+                      isAlignMissing 
+                        ? 'bg-rose-200/50 text-rose-700 font-black' 
+                        : calibrationData.needsAlignment
+                        ? 'bg-emerald-100/50 text-emerald-800 animate-fade-in'
+                        : 'bg-slate-200 text-slate-550'
+                    }`}>
+                      {isAlignMissing ? 'ONTBREEKT' : calibrationData.needsAlignment ? 'OK' : 'NVT'}
+                    </span>
+                  </div>
+                  <p className="text-[9px] font-medium mt-1 leading-tight truncate text-slate-500" title={calibrationData.alignmentReason || undefined}>
+                    {isAlignMissing 
+                      ? `⚠️ Vereist: "${calibrationData.alignmentReason || 'Uitlijn code'}"`
+                      : calibrationData.needsAlignment
+                      ? `✓ Ingediend in Checklist ("${calibrationData.alignmentReason || 'Uitlijnen'}")`
+                      : 'Geen uitlijning vereist volgens calculatie.'}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
       {/* Right Card: Checklist & Actions */}
       <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between md:min-w-[340px] lg:max-w-[380px] gap-4">
@@ -2013,6 +2156,7 @@ export default function App() {
       </div>
     </div>
   );
+};
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100">
@@ -2670,7 +2814,7 @@ export default function App() {
                                 shouldDim ? 'opacity-[0.14] grayscale saturate-0 contrast-75 hover:opacity-100 hover:grayscale-0 hover:saturate-100 hover:contrast-100 focus-within:opacity-100 focus-within:grayscale-0 transition-all duration-300' : ''
                               }`}
                             >
-                            <td className="px-4 py-4">
+                              <td className="px-4 py-4">
                               {(res.status === 'removed' || res.status === 'approved') && (
                                 <button 
                                   onClick={() => toggleStrikethrough(res.calc.id)}
@@ -2702,6 +2846,11 @@ export default function App() {
                                   <Trash2 size={16} />
                                   VERWIJDERD
                                 </div>
+                              ) : res.status === 'extra' ? (
+                                <div className="flex items-center gap-2 text-purple-600">
+                                  <Package size={16} />
+                                  EXTRA FACTUUR
+                                </div>
                               ) : (
                                 <div className="flex items-center gap-2 text-rose-500">
                                   <XCircle size={16} />
@@ -2723,8 +2872,12 @@ export default function App() {
                                   {res.calc.id}
                                 </span>
                               ) : res.status === 'removed' ? (
-                                <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-400 border border-slate-200 line-through font-mono">
+                                <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-405 border border-slate-200 line-through font-mono">
                                   {res.calc.id}
+                                </span>
+                              ) : res.status === 'extra' ? (
+                                <span className="inline-flex items-center justify-center font-black text-[9px] uppercase tracking-widest px-2 py-0.5 rounded bg-purple-50 text-purple-750 border border-purple-200 shadow-xs">
+                                  EXTRA
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
@@ -2741,7 +2894,7 @@ export default function App() {
                                   className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               ) : (
-                                <div className={`font-semibold text-slate-800 text-sm ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>{res.calc.description}</div>
+                                <div className={`font-semibold text-sm ${res.status === 'extra' ? 'text-slate-400 italic font-medium' : 'text-slate-800'} ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>{res.calc.description}</div>
                               )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
@@ -2775,6 +2928,8 @@ export default function App() {
                                     className="w-24 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-base font-black focus:ring-1 focus:ring-blue-500 outline-none"
                                   />
                                 </div>
+                              ) : res.status === 'extra' ? (
+                                <span className="text-slate-350 font-bold text-sm select-none">—</span>
                               ) : (
                                 <div className="flex items-center gap-2 group/price-cell">
                                   {res.status === 'deviation' ? (
@@ -2856,6 +3011,8 @@ export default function App() {
                                    className={`p-1.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
                                      res.status === 'matched' 
                                        ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                                       : res.status === 'extra'
+                                       ? 'bg-purple-50/75 border-purple-200 hover:bg-purple-100/75 text-purple-900 border'
                                        : 'bg-rose-50 border-rose-200 hover:bg-rose-100'
                                    }`}
                                  >
@@ -2890,7 +3047,7 @@ export default function App() {
                                      </div>
                                    ) : (
                                      <div className="flex items-center gap-2">
-                                       <span className="font-black text-xs text-emerald-600">
+                                       <span className={`font-black text-xs ${res.status === 'extra' ? 'text-purple-650' : 'text-emerald-600'}`}>
                                          € {res.match.price.toFixed(2)}
                                        </span>
                                        <code className="text-[10px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/50 whitespace-nowrap">
@@ -2913,11 +3070,11 @@ export default function App() {
                              </td>
                             <td className="px-6 py-4">
                               {res.priceDiff !== 0 ? (
-                                <span className={`font-black text-base ${res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                  {res.priceDiff > 0 ? '+' : ''}{res.priceDiff.toFixed(2)}
+                                <span className={`font-black text-base ${res.status === 'extra' ? 'text-purple-650 font-black' : res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  {res.status === 'extra' ? '€ ' : res.priceDiff > 0 ? '+' : ''}{res.priceDiff.toFixed(2)}
                                 </span>
                               ) : (
-                                <span className="text-slate-300 font-bold">—</span>
+                                <span className="text-slate-305 font-bold">—</span>
                               )}
                             </td>
                             <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
