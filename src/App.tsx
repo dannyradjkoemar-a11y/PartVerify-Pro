@@ -3766,6 +3766,7 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
   const [newPartPrice, setNewPartPrice] = useState("");
 
   const [adminPriceUitlezen, setAdminPriceUitlezen] = useState("");
+  const [adminUnitUitlezen, setAdminUnitUitlezen] = useState<"€" | "Ae">("€");
   const [adminPriceUitlijnen, setAdminPriceUitlijnen] = useState("");
   const [adminPriceKoelvloeistof, setAdminPriceKoelvloeistof] = useState("");
   const [adminPriceAntiroest, setAdminPriceAntiroest] = useState("");
@@ -3796,6 +3797,7 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
       const currentClient = clients.find(c => c.id === selectedAdminClient);
       if (currentClient) {
         setAdminPriceUitlezen(currentClient.priceUitlezen !== undefined ? String(currentClient.priceUitlezen) : "");
+        setAdminUnitUitlezen(currentClient.unitUitlezen === "Ae" ? "Ae" : "€");
         setAdminPriceUitlijnen(currentClient.priceUitlijnen !== undefined ? String(currentClient.priceUitlijnen) : "");
         setAdminPriceKoelvloeistof(currentClient.priceKoelvloeistof !== undefined ? String(currentClient.priceKoelvloeistof) : "");
         setAdminPriceAntiroest(currentClient.priceAntiroest !== undefined ? String(currentClient.priceAntiroest) : "");
@@ -3809,6 +3811,7 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
       const clientRef = doc(db, "clients", selectedAdminClient);
       const updatedData = {
         priceUitlezen: parseFloat(adminPriceUitlezen.replace(',', '.')) || 0,
+        unitUitlezen: adminUnitUitlezen,
         priceUitlijnen: parseFloat(adminPriceUitlijnen.replace(',', '.')) || 0,
         priceKoelvloeistof: parseFloat(adminPriceKoelvloeistof.replace(',', '.')) || 0,
         priceAntiroest: parseFloat(adminPriceAntiroest.replace(',', '.')) || 0,
@@ -3969,15 +3972,27 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Uitlezen (Voor/Na)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
-                        <input 
-                          type="text" 
-                          value={adminPriceUitlezen}
-                          onChange={(e) => setAdminPriceUitlezen(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
-                        />
+                      <div className="flex gap-1.5">
+                        <div className="relative flex-1">
+                          <span className="absolute left-2.5 top-2 text-slate-400 text-xs font-black">
+                            {adminUnitUitlezen === "€" ? "€" : "Ae"}
+                          </span>
+                          <input 
+                            type="text" 
+                            value={adminPriceUitlezen}
+                            onChange={(e) => setAdminPriceUitlezen(e.target.value)}
+                            placeholder="0.00"
+                            className={`w-full ${adminUnitUitlezen === "Ae" ? "pl-9" : "pl-6"} pr-2 py-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none h-[38px]`}
+                          />
+                        </div>
+                        <select
+                          value={adminUnitUitlezen}
+                          onChange={(e) => setAdminUnitUitlezen(e.target.value as "€" | "Ae")}
+                          className="px-2 py-1.5 border border-slate-200 bg-white rounded-lg text-xs font-bold text-slate-700 focus:ring-1 focus:ring-amber-500 outline-none cursor-pointer h-[38px] shrink-0"
+                        >
+                          <option value="€">€</option>
+                          <option value="Ae">Ae</option>
+                        </select>
                       </div>
                     </div>
                     <div>
@@ -4358,6 +4373,16 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
     return `€ ${Number(val).toFixed(2)}`;
   };
 
+  const formatPriceUitlezen = (val: any, unit: string) => {
+    if (val === undefined || val === null || val === "" || isNaN(Number(val)) || Number(val) === 0) {
+      return "Geen";
+    }
+    if (unit === "Ae") {
+      return `${val} Ae`;
+    }
+    return `€ ${Number(val).toFixed(2)}`;
+  };
+
   return (
     <motion.div
       initial={{ x: "280px" }}
@@ -4401,7 +4426,7 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
                 <span className="text-[8px] text-slate-400 font-medium block leading-normal">Voor en Na OBD</span>
               </div>
               <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceUitlezen ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
-                {formatPrice(currentClient?.priceUitlezen)}
+                {formatPriceUitlezen(currentClient?.priceUitlezen, currentClient?.unitUitlezen)}
               </span>
             </div>
 
