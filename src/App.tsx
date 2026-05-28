@@ -1313,127 +1313,221 @@ export default function App() {
     const dateStr = now.toLocaleDateString('nl-NL');
     const timeStr = now.toLocaleTimeString('nl-NL');
 
-    // Header
-    doc.setFontSize(22);
-    doc.setTextColor(37, 99, 235); // Blue-600
-    doc.text("PartVerify Pro", 14, 20);
-    
-    doc.setFontSize(10);
-    doc.setTextColor(100);
-    doc.text(`Verificatie Verslag - Datum: ${dateStr} ${timeStr}`, 14, 28);
-    if (licensePlate) doc.text(`Kenteken: ${licensePlate.toUpperCase()}`, 14, 33);
-    if (caseNumber) doc.text(`Dossiernummer: ${caseNumber}`, 14, 38);
-    if (chassisNumber) doc.text(`Chassisnummer: ${chassisNumber.toUpperCase()}`, 14, 43);
-    if (kmStand) doc.text(`Kilometerstand: ${parseInt(kmStand.replace(/\D/g, '')).toLocaleString('nl-NL')} km`, 120, 33);
-    if (vehicleData) {
-      const estimatedValue = calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand);
-      if (estimatedValue) {
-        doc.text(`Geschatte Dagwaarde: EUR ${estimatedValue.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, 120, 38);
-      }
-    }
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("Ontwikkeld door: Danny Radjkoemar", 120, 20);
-    doc.setFont("helvetica", "normal");
-    doc.text("Onderdelen Controle Systeem", 120, 25);
+    // Draw Elegant Top Header Banner (Slate Steel Style)
+    doc.setFillColor(30, 41, 59); // Slate-800
+    doc.rect(0, 0, 210, 32, "F");
 
-    // Summary Stats - Shift down if chassis number is printed
-    doc.setDrawColor(226, 232, 240);
-    const lineY = chassisNumber ? 47 : 42;
-    doc.line(14, lineY, 196, lineY);
-
-    doc.setFontSize(12);
-    doc.setTextColor(0);
+    // Corporate Title & Subtitle inside details
     doc.setFont("helvetica", "bold");
-    doc.text("Samenvatting:", 14, lineY + 9);
+    doc.setFontSize(20);
+    doc.setTextColor(255, 255, 255); // White text
+    doc.text("PartVerify Pro", 14, 18);
+    
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(203, 213, 225); // Slate-300
+    doc.text("Eindcalculatie & Inkoopfactuur Verificatieverslag", 14, 25);
 
-    doc.setFontSize(10);
-    doc.text(`Totaal aantal onderdelen: ${results.length}`, 14, lineY + 16);
-    doc.setTextColor(16, 185, 129); // Emerald-600
-    doc.text(`Match OK: ${stats.matched}`, 14, lineY + 21);
-    doc.setTextColor(245, 158, 11); // Amber-500
-    doc.text(`Handmatig Goedgekeurd: ${stats.approved}`, 14, lineY + 26);
-    doc.setTextColor(225, 29, 72); // Rose-600
-    doc.text(`Afwijkingen: ${stats.deviations}`, 14, lineY + 31);
-    doc.setTextColor(244, 63, 94); // Rose-500
-    doc.text(`Ontbrekend: ${stats.missing}`, 14, lineY + 36);
-    
-    doc.setTextColor(217, 119, 6); // Amber-600
-    doc.setFontSize(11);
-    doc.text(`Totaal Prijsverschil: EUR ${stats.totalPriceDiff.toFixed(2)}`, 14, lineY + 44);
-    
-    doc.setTextColor(37, 99, 235); // Blue-600
+    // Right details inside banner
     doc.setFont("helvetica", "bold");
-    doc.text(`TOTAAL GEVERIFIEERD: EUR ${stats.totalVerifiedAmount.toFixed(2)}`, 14, lineY + 50);
-    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(251, 191, 36); // Amber Gold
+    doc.text("Developed by Danny Radjkoemar", 130, 14);
 
-    // Right side: Vehicle Requirements & Scanned Audatex Codes
-    doc.setFontSize(11);
-    doc.setTextColor(0);
-    doc.setFont("helvetica", "bold");
-    doc.text("Voertuigvereisten (Diagnose):", 110, lineY + 9);
     doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`Uitvoerdraad: ${dateStr} ${timeStr}`, 130, 19);
     
+    const activeClient = clients.find(c => c.id === selectedClientId || c.name?.toLowerCase() === selectedClientId?.toLowerCase());
+    const clientNameText = activeClient ? activeClient.name : "Standaard";
+    doc.text(`Opdrachtgever: ${clientNameText}`, 130, 24);
+
+    // Let's draw side-by-side rounded panels for Voertuig & Audit Samenvatting
+    const boxY = 38;
+    const boxHeight = 52;
+    const boxWidth = 88;
+
+    // Card 1: Voertuig- & Dossiergegevens
+    doc.setDrawColor(226, 232, 240); // slate-200
+    doc.setLineWidth(0.3);
+    doc.setFillColor(252, 252, 252);
+    doc.roundedRect(14, boxY, boxWidth, boxHeight, 3, 3, "FD");
+
+    // Card 2: Audit Samenvatting
+    doc.roundedRect(108, boxY, boxWidth, boxHeight, 3, 3, "FD");
+
+    // Left Card Text (Voertuig- & Dossiergegevens)
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text(`Kalibreren (ADAS): ${calibrationData.needsCalibration ? 'JA, VEREIST' : 'NEE'}`, 110, lineY + 15);
-    if (calibrationData.needsCalibration && calibrationData.calibrationReason) {
-      doc.setFontSize(7.5);
-      doc.setTextColor(100);
-      doc.text(`* Trigger: ${calibrationData.calibrationReason.substring(0, 48)}`, 110, lineY + 19);
-      doc.setFontSize(9);
-      doc.setTextColor(0);
-    }
+    doc.setTextColor(51, 65, 85); // Slate-700
+    doc.text("VOERTUIG- & DOSSIERGEGEVENS", 19, boxY + 6);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139); // Slate-500
     
-    doc.text(`Uitlijnen (Geometrie): ${calibrationData.needsAlignment ? 'JA, VEREIST' : 'NEE'}`, 110, lineY + 24);
-    if (calibrationData.needsAlignment && calibrationData.alignmentReason) {
-      doc.setFontSize(7.5);
-      doc.setTextColor(100);
-      const reasonPart = calibrationData.alignmentReason;
-      if (reasonPart.length > 48) {
-        doc.text(`* Trigger: ${reasonPart.substring(0, 48)}`, 110, lineY + 28);
-        doc.text(`  ${reasonPart.substring(48, 96)}`, 110, lineY + 31);
-      } else {
-        doc.text(`* Trigger: ${reasonPart}`, 110, lineY + 28);
-      }
-      doc.setFontSize(9);
-      doc.setTextColor(0);
-    }
+    let leftY = boxY + 13;
+    const itemSpacing = 5.2;
 
-    const scannedCodes = scanAudatexCodes(calcInput);
-    if (scannedCodes.length > 0) {
+    const printMetaLine = (label: string, val: string, x: number, y: number) => {
       doc.setFont("helvetica", "bold");
-      doc.text("Gedetecteerde Audatex Codes:", 110, lineY + 37);
+      doc.setTextColor(71, 85, 105); // Slate-600
+      doc.text(label + ":", x, y);
+      
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(7.5);
-      doc.setTextColor(80);
-      const codeStrList = scannedCodes.slice(0, 4).map(c => `${c.code}: ${c.description.substring(0, 20)}`).join(', ');
-      doc.text(scannedCodes.length > 4 ? `${codeStrList}...` : codeStrList, 110, lineY + 41);
-    }
+      doc.setTextColor(15, 23, 42); // Slate-900
+      doc.text(val, x + 24, y);
+    };
 
-    // Explicit checklist reminder steps block
+    printMetaLine("Kenteken", licensePlate ? licensePlate.toUpperCase() : "Onbekend", 19, leftY);
+    leftY += itemSpacing;
+    printMetaLine("DossierNr", caseNumber || "Niet opgegeven", 19, leftY);
+    leftY += itemSpacing;
+    printMetaLine("ChassisNr", chassisNumber ? chassisNumber.toUpperCase() : "Onbekend", 19, leftY);
+    leftY += itemSpacing;
+    printMetaLine("KM-stand", kmStand ? parseInt(kmStand.replace(/\D/g, '')).toLocaleString('nl-NL') + " km" : "Onbekend", 19, leftY);
+    leftY += itemSpacing;
+    
+    let vehicleDesc = "Onbekend";
+    if (vehicleData) {
+      const brand = vehicleData.merk || "";
+      const model = vehicleData.handelsbenaming || "";
+      vehicleDesc = `${capitalizeWords(brand)} ${capitalizeWords(model)}`.trim() || "Onbekend";
+    }
+    printMetaLine("Voertuig", vehicleDesc.length > 25 ? vehicleDesc.substring(0, 25) + "..." : vehicleDesc, 19, leftY);
+    leftY += itemSpacing;
+
+    let dagwaardeStr = "Onbekend";
+    if (vehicleData) {
+      const estValue = calculateEstimatedDagwaarde(vehicleData.catalogusprijs, vehicleData.datum_eerste_toelating, kmStand);
+      if (estValue) dagwaardeStr = `EUR ${estValue.toLocaleString('nl-NL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    printMetaLine("Dagwaarde", dagwaardeStr, 19, leftY);
+
+    // Right Card Text (Audit Samenvatting)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(51, 65, 85);
+    doc.text("AUDIT RESULTAAT & TOTALEN", 113, boxY + 6);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+
+    let rightY = boxY + 13;
+    
+    // Total Verified Amount (Blue highlights)
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(37, 99, 235); // Blue-600
+    doc.text("Geverifieerd Totaal:", 113, rightY);
+    doc.text(`EUR ${stats.totalVerifiedAmount.toFixed(2)}`, 147, rightY);
+    rightY += itemSpacing;
+
+    doc.setFont("helvetica", "normal");
+    
+    // Total Price Diff (Rose or Green)
+    doc.setFont("helvetica", "bold");
+    if (stats.totalPriceDiff > 0) {
+      doc.setTextColor(225, 29, 72); // Rose-650
+    } else if (stats.totalPriceDiff < 0) {
+      doc.setTextColor(16, 185, 129); // Emerald-600
+    } else {
+      doc.setTextColor(71, 85, 105);
+    }
+    doc.text("Totaal Verschil:", 113, rightY);
+    doc.text(`EUR ${stats.totalPriceDiff.toFixed(2)}`, 147, rightY);
+    rightY += itemSpacing;
+
+    // Normalizing spacing for summary counters
+    const printStatusCounter = (label: string, count: number, color: [number, number, number], x: number, y: number) => {
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(100, 116, 139);
+      doc.text(label + ":", x, y);
+      
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(color[0], color[1], color[2]);
+      doc.text(String(count), x + 25, y);
+    };
+
+    printStatusCounter("Match OK", stats.matched, [16, 185, 129], 113, rightY);
+    rightY += itemSpacing;
+    printStatusCounter("Handmatig OK", stats.approved, [245, 158, 11], 113, rightY);
+    rightY += itemSpacing;
+    printStatusCounter("Afwijkingen", stats.deviations, [225, 29, 72], 113, rightY);
+    rightY += itemSpacing;
+    printStatusCounter("Ontbrekend", stats.missing, [244, 63, 94], 113, rightY);
+
+    // Slide in the Price Agreements line
+    let agreementsY = 94;
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); // extremely soft slate
+    doc.roundedRect(14, agreementsY, 182, 11, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105); // slate-600
+    doc.text("GEREGISTREERDE PRIJSAFPRAKEN OPDRACHTGEVER:", 18, agreementsY + 7.2);
+
+    const prUitlezen = activeClient?.priceUitlezen;
+    const unitUitlezen = activeClient?.unitUitlezen || "€";
+    const prUitlijnen = activeClient?.priceUitlijnen;
+    const prKoelvloeistof = activeClient?.priceKoelvloeistof;
+    const prAntiroest = activeClient?.priceAntiroest;
+
+    let agreementsParts = [];
+    if (prUitlezen) agreementsParts.push(`Uitlezen: ${unitUitlezen === "Ae" ? `${prUitlezen} Ae` : `€${Number(prUitlezen).toFixed(2)}`}`);
+    else agreementsParts.push("Uitlezen: —");
+    
+    if (prUitlijnen) agreementsParts.push(`Uitlijnen: €${Number(prUitlijnen).toFixed(2)}`);
+    else agreementsParts.push("Uitlijnen: —");
+
+    if (prKoelvloeistof) agreementsParts.push(`Koelvloeistof: €${Number(prKoelvloeistof).toFixed(2)}`);
+    else agreementsParts.push("Koelvloeistof: —");
+
+    if (prAntiroest) agreementsParts.push(`Antiroest: €${Number(prAntiroest).toFixed(2)}`);
+    else agreementsParts.push("Antiroest: —");
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(30, 41, 59);
+    doc.text(agreementsParts.join("   |   "), 93, agreementsY + 7.2);
+
+    // Checklist diagnostics panel
+    let diagnosticY = 109;
+    doc.roundedRect(14, diagnosticY, 182, 11, 2, 2, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105);
+    doc.text("DIAGNOSTISCHE EXTRAS & VERREKENINGEN:", 18, diagnosticY + 7.2);
+
     const checkListItems = [];
     if (readoutPre) checkListItems.push("Diagnose VOOR: OK");
     if (readoutPost) checkListItems.push("Diagnose NA: OK");
-    if (alignmentStatus !== 'none') checkListItems.push(`Uitlijnen: ${alignmentStatus === 'intern' ? 'JA (Int)' : 'JA (Ext)'}`);
-    if (calibrationStatus !== 'none') checkListItems.push(`ADAS: ${calibrationStatus === 'intern' ? 'JA (Int)' : 'JA (Ext)'}`);
+    if (alignmentStatus !== 'none') checkListItems.push(`Uitlijnen: ${alignmentStatus === 'intern' ? 'Interne post' : 'Externe post'}`);
+    if (calibrationStatus !== 'none') checkListItems.push(`ADAS: ${calibrationStatus === 'intern' ? 'Interne post' : 'Externe post'}`);
+    if (checkListItems.length === 0) checkListItems.push("Geen extra checklist-posten verwerkt");
 
-    if (checkListItems.length > 0) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(0);
-      doc.text("Uitgevoerde Stappen (Checklist):", 110, lineY + 47);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(16, 185, 129); // Emerald-600 color
-      doc.text(checkListItems.join(' | '), 110, lineY + 52);
-    }
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(16, 185, 129); // emerald-600
+    doc.text(checkListItems.join("  |  "), 93, diagnosticY + 7.2);
 
     // Reset general font settings
     doc.setTextColor(0);
     doc.setFont("helvetica", "normal");
 
     // Table
+    const scannedCodes = scanAudatexCodes(calcInput);
+    let tableStartY = 125;
+    if (scannedCodes.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 116, 139);
+      const codeStrList = scannedCodes.slice(0, 5).map(c => `${c.code}: ${c.description}`).join(', ');
+      doc.text(`Gedetecteerde Audatex Codes: ${scannedCodes.length > 5 ? `${codeStrList}...` : codeStrList}`, 14, 125);
+      tableStartY = 129;
+    }
+
     const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
     const tableData = visibleInPdf.map(res => [
       res.status === 'matched' ? 'OK' : 
@@ -1449,18 +1543,31 @@ export default function App() {
     ]);
 
     autoTable(doc, {
-      startY: lineY + 63,
+      startY: tableStartY,
       head: [['Status', 'Pos.', 'Onderdeel', 'Partnummer', 'Calc. Prijs', 'Factuur Prijs', 'Verschil']],
       body: tableData,
-      headStyles: { fillColor: [37, 99, 235], textColor: 255, fontSize: 9, fontStyle: 'bold' },
-      bodyStyles: { fontSize: 8 },
+      headStyles: { 
+        fillColor: [30, 41, 59], // Elegant Slate Navy
+        textColor: 255, 
+        fontSize: 8.5, 
+        fontStyle: 'bold',
+        cellPadding: { top: 3.5, bottom: 3.5, left: 3, right: 3 }
+      },
+      bodyStyles: { 
+        fontSize: 7.5,
+        textColor: [51, 65, 85], // Slate-700
+        cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 }
+      },
+      alternateRowStyles: { 
+        fillColor: [248, 250, 252] // light Slate-50 alternating rows
+      },
       columnStyles: {
-        0: { cellWidth: 22 },
-        1: { cellWidth: 15 },
-        2: { cellWidth: 45 },
-        3: { cellWidth: 30 },
-        4: { halign: 'right' },
-        5: { halign: 'right' },
+        0: { cellWidth: 24, fontStyle: 'bold' },
+        1: { cellWidth: 12, halign: 'center' },
+        2: { cellWidth: 46 },
+        3: { cellWidth: 28 },
+        4: { halign: 'right', fontStyle: 'bold' },
+        5: { halign: 'right', fontStyle: 'bold' },
         6: { halign: 'right', fontStyle: 'bold' }
       },
       didParseCell: (data) => {
@@ -1468,47 +1575,58 @@ export default function App() {
         if (!item) return;
 
         if (data.section === 'body') {
-          // Soft reddish background for any deviation rows to catch attention
+          // Highlight rows with deviations nicely and softly
           if (item.status === 'deviation') {
-            data.cell.styles.fillColor = [254, 242, 242]; // Light red
+            data.cell.styles.fillColor = [254, 244, 244]; // extremely soft ruby background
+          } else if (item.status === 'missing') {
+            data.cell.styles.fillColor = [255, 241, 242]; // soft reddish pink
           }
 
+          // Column specific visual styles for high-fidelity text-colors
           if (data.column.index === 0) {
-            if (item.status === 'matched') data.cell.styles.textColor = [16, 185, 129];
-            else if (item.status === 'approved') data.cell.styles.textColor = [245, 158, 11];
-            else if (item.status === 'deviation') {
-              data.cell.styles.textColor = [225, 29, 72];
-              data.cell.styles.fontStyle = 'bold';
+            // Status label cell styling
+            if (item.status === 'matched') {
+              data.cell.styles.textColor = [16, 185, 129]; // Emerald 600
+            } else if (item.status === 'approved') {
+              data.cell.styles.textColor = [217, 119, 6]; // Amber 600
+            } else if (item.status === 'deviation') {
+              data.cell.styles.textColor = [225, 29, 72]; // Rose 600
+            } else if (item.status === 'missing') {
+              data.cell.styles.textColor = [244, 63, 94]; // Rose 500
+            } else if (item.status === 'removed') {
+              data.cell.styles.textColor = [148, 163, 184]; // Slate 400
             }
-            else if (item.status === 'missing') data.cell.styles.textColor = [244, 63, 94];
-            else if (item.status === 'removed') data.cell.styles.textColor = [150, 150, 150];
           }
 
-          // Pos. column (Index 1) - yellow highlighter highlights for deviation position
+          // Position highlight for high priority items
           if (data.column.index === 1 && item.status === 'deviation') {
-            data.cell.styles.fillColor = [253, 224, 71]; // Bright yellow highlighter
-            data.cell.styles.textColor = [15, 23, 42]; // Slate-900 (dark charcoal text)
+            data.cell.styles.textColor = [15, 23, 42]; // dark slate
             data.cell.styles.fontStyle = 'bold';
           }
 
-          // Factuur Prijs column (Index 5)
+          // Calc price striker column or colors
+          if (data.column.index === 4 && item.status === 'deviation') {
+            data.cell.styles.textColor = [100, 116, 139]; // Mute original price slightly
+          }
+
+          // Verified Invoice Price highlights
           if (data.column.index === 5) {
             if (item.status === 'deviation') {
-              data.cell.styles.fillColor = [209, 250, 229]; // Soft emerald highlighter
-              data.cell.styles.textColor = [16, 185, 129]; // Active green
-              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.textColor = [16, 185, 129]; // Clean emerald highlight for approved overrides
+              data.cell.styles.fillColor = [236, 253, 245]; // soft emerald background for verified price
             } else {
-              const val = parseFloat(data.cell.text[0].replace('EUR ', '').replace('+', ''));
+              const valText = data.cell.text[0] || "";
+              const val = parseFloat(valText.replace('EUR ', '').replace('+', ''));
               if (val > 0) data.cell.styles.textColor = [16, 185, 129];
             }
           }
 
-          // Price differences (Index 6)
+          // Difference price highlights
           if (data.column.index === 6) {
             if (item.priceDiff > 0) {
-              data.cell.styles.textColor = [225, 29, 72]; // Rose-600 (higher cost)
+              data.cell.styles.textColor = [225, 29, 72]; // Higher cost matches warning rose
             } else if (item.priceDiff < 0) {
-              data.cell.styles.textColor = [16, 185, 129]; // Emerald (saving details)
+              data.cell.styles.textColor = [16, 185, 129]; // Savings green
             }
           }
         }
@@ -1518,15 +1636,17 @@ export default function App() {
         if (!item) return;
 
         if (data.section === 'body') {
+          // Line strike-through for calculation price to indicate it was overridden or changed
           if (data.column.index === 4 && item.status === 'deviation') {
             const tempDrawColor = doc.getDrawColor(); 
             const tempLineWidth = doc.getLineWidth();
 
-            doc.setDrawColor(225, 29, 72); // Rose-600 red
-            doc.setLineWidth(1.2);
+            doc.setDrawColor(225, 29, 72); // elegant warning crimson line
+            doc.setLineWidth(1.0);
             
-            const xLeft = data.cell.x + 2;
-            const xRight = data.cell.x + data.cell.width - 2;
+            // Strike through the price cell elegantly
+            const xLeft = data.cell.x + 3;
+            const xRight = data.cell.x + data.cell.width - 3;
             const yCenter = data.cell.y + (data.cell.height / 2);
             doc.line(xLeft, yCenter, xRight, yCenter);
 
@@ -1537,13 +1657,18 @@ export default function App() {
       }
     });
 
-    // Footer
+    // Footer with branded subtitle & page numbers
     const pageCount = (doc.internal as any).getNumberOfPages();
     for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(150);
-        doc.text(`Pagina ${i} van ${pageCount} - Maker: Danny Radjkoemar`, 14, doc.internal.pageSize.height - 10);
+        doc.setFontSize(7.5);
+        doc.setTextColor(148, 163, 184); // Slate-400
+        
+        // Brand string left side
+        doc.text("PartVerify Pro  |  Developed by Danny Radjkoemar", 14, doc.internal.pageSize.height - 10);
+        
+        // Page num right side
+        doc.text(`Pagina ${i} van ${pageCount}`, doc.internal.pageSize.width - 32, doc.internal.pageSize.height - 10);
     }
 
     doc.save(`PartVerify_Rapport_${dateStr.replace(/\//g, '-')}.pdf`);
@@ -2597,56 +2722,7 @@ export default function App() {
 
 
 
-          {/* RDW ADAS / Radar Intelli-Audit Alerts */}
-          {(() => {
-            const audit = analyzeRadarAdas(vehicleData, calcInput, invoiceInput);
-            if (!audit || !audit.alert) return null;
-            
-            const { type, title, message } = audit.alert;
-            return (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`p-5 rounded-3xl border text-left flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4 ${
-                  type === 'warning' 
-                    ? 'bg-rose-50 border-rose-100 text-rose-800' 
-                    : 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                }`}
-              >
-                <div className="flex items-start gap-3 flex-1">
-                  <div className={`p-2.5 rounded-2xl shrink-0 ${
-                    type === 'warning' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'
-                  }`}>
-                    {type === 'warning' ? <AlertCircle size={20} /> : <CheckCircle2 size={20} />}
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-black tracking-tight flex items-center gap-2">
-                      <span>{title}</span>
-                      <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
-                        type === 'warning' ? 'bg-rose-200 text-rose-800' : 'bg-emerald-200 text-emerald-850'
-                      }`}>ADAS Audit</span>
-                    </h4>
-                    <p className="text-xs font-medium mt-1 leading-relaxed opacity-95">{message}</p>
-                  </div>
-                </div>
-                {/* Action button */}
-                <div className="shrink-0 w-full md:w-auto text-right self-center">
-                  <button
-                    onClick={() => setShowRdwModal(true)}
-                    className={`text-xs font-black uppercase tracking-wider px-4 py-2.5 rounded-xl border transition-all active:scale-95 whitespace-nowrap ${
-                      type === 'warning' 
-                        ? 'bg-rose-100/60 hover:bg-rose-200 text-rose-800 border-rose-200' 
-                        : 'bg-emerald-100/60 hover:bg-emerald-200 text-emerald-850 border-emerald-200'
-                    }`}
-                  >
-                    Bekijk Radar Status
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })()}
-
-            {/* Report Section */}
+          {/* Report Section */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-slate-100 space-y-4">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
