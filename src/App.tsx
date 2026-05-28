@@ -39,7 +39,9 @@ import {
   QrCode,
   Strikethrough,
   Camera,
-  GraduationCap
+  GraduationCap,
+  Check,
+  ChevronDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -108,6 +110,10 @@ export default function App() {
   const [loginStep, setLoginStep] = useState<'password' | 'tfa' | 'tfa-setup'>('password');
   const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
   const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis' | 'training_center'>('verification');
+  const [readoutPre, setReadoutPre] = useState(false);
+  const [readoutPost, setReadoutPost] = useState(false);
+  const [alignmentStatus, setAlignmentStatus] = useState<'none' | 'intern' | 'extern'>('none');
+  const [calibrationStatus, setCalibrationStatus] = useState<'none' | 'intern' | 'extern'>('none');
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1210,6 +1216,10 @@ export default function App() {
     setKmStand("");
     setChassisNumber("");
     setStatusFilter('all');
+    setReadoutPre(false);
+    setReadoutPost(false);
+    setAlignmentStatus('none');
+    setCalibrationStatus('none');
   };
 
   const toggleRedPriceStrikethrough = (id: string) => {
@@ -1382,12 +1392,30 @@ export default function App() {
     const scannedCodes = scanAudatexCodes(calcInput);
     if (scannedCodes.length > 0) {
       doc.setFont("helvetica", "bold");
-      doc.text(`Gedetecteerde Audatex Codes:`, 110, lineY + 37);
+      doc.text("Gedetecteerde Audatex Codes:", 110, lineY + 37);
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);
       doc.setTextColor(80);
       const codeStrList = scannedCodes.slice(0, 4).map(c => `${c.code}: ${c.description.substring(0, 20)}`).join(', ');
       doc.text(scannedCodes.length > 4 ? `${codeStrList}...` : codeStrList, 110, lineY + 41);
+    }
+
+    // Explicit checklist reminder steps block
+    const checkListItems = [];
+    if (readoutPre) checkListItems.push("Diagnose VOOR: OK");
+    if (readoutPost) checkListItems.push("Diagnose NA: OK");
+    if (alignmentStatus !== 'none') checkListItems.push(`Uitlijnen: ${alignmentStatus === 'intern' ? 'JA (Int)' : 'JA (Ext)'}`);
+    if (calibrationStatus !== 'none') checkListItems.push(`ADAS: ${calibrationStatus === 'intern' ? 'JA (Int)' : 'JA (Ext)'}`);
+
+    if (checkListItems.length > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(0);
+      doc.text("Uitgevoerde Stappen (Checklist):", 110, lineY + 47);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      doc.setTextColor(16, 185, 129); // Emerald-600 color
+      doc.text(checkListItems.join(' | '), 110, lineY + 52);
     }
 
     // Reset general font settings
@@ -1747,6 +1775,245 @@ export default function App() {
     );
   }
 
+  const renderDossierBar = () => (
+    <div className="flex flex-col lg:flex-row gap-4 items-stretch mb-6">
+      <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
+        <div className="w-full">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
+          <div className="flex items-center gap-3">
+            <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-16 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+              <div className="bg-[#0039AE] text-white text-[10px] w-10 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
+                <span className="text-[12px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                <span className="text-[13px] font-sans font-black tracking-normal leading-none select-none">NL</span>
+              </div>
+              
+              <input 
+                type="text"
+                placeholder="AB-123-C"
+                maxLength={11}
+                className="w-full bg-transparent text-center text-xl md:text-2xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20"
+                value={licensePlate}
+                onChange={(e) => setLicensePlate(e.target.value)}
+              />
+            </div>
+            {licensePlate.replace(/[^a-zA-Z0-9]/g, '').length >= 6 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (vehicleData) {
+                    setShowRdwModal(true);
+                  }
+                }}
+                disabled={vehicleLoading}
+                className={`h-16 px-4 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                  vehicleData 
+                    ? 'bg-yellow-300 text-slate-150 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
+                    : vehicleLoading 
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50' 
+                    : 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 hover:text-blue-700'
+                }`}
+                title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
+              >
+                <CarFront size={14} className={vehicleLoading ? "animate-spin text-blue-500" : "text-current"} />
+                <span>{vehicleLoading ? 'Laden...' : 'RDW'}</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="w-full">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Dossiernummer</label>
+          <input 
+            type="text"
+            placeholder="Invoeren..."
+            className="w-full h-16 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-lg font-black text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all placeholder:text-slate-300 shadow-sm"
+            value={caseNumber}
+            onChange={(e) => setCaseNumber(e.target.value)}
+          />
+        </div>
+
+        <div className="w-full">
+          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Opdrachtgever</label>
+          <div className="relative">
+            <select 
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="w-full h-16 bg-slate-50 border border-slate-100 px-4 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-400 transition-all appearance-none cursor-pointer pr-10 shadow-sm"
+            >
+              <option value="">Geen / Standaard</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
+              <Layers size={14} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Right Card: Checklist & Actions */}
+      <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between md:min-w-[340px] lg:max-w-[380px] gap-4">
+        <div className="space-y-3 font-sans">
+          <div className="flex items-center justify-between border-b pb-1.5 border-slate-100">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Voertuig Checklist</p>
+            <span className="text-[9px] bg-blue-50 text-blue-600 font-bold px-1.5 rounded-full">Stappen</span>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-2">
+            <button 
+              type="button"
+              onClick={() => setReadoutPre(!readoutPre)}
+              className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 select-none active:scale-95 text-xs font-bold ${
+                readoutPre 
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                  : 'border-slate-150 bg-slate-50 hover:bg-slate-100 text-slate-500'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                readoutPre ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300'
+              }`}>
+                {readoutPre && <Check size={10} strokeWidth={3} />}
+              </div>
+              <span className="truncate">Uitlezen VOOR</span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => setReadoutPost(!readoutPost)}
+              className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 select-none active:scale-95 text-xs font-bold ${
+                readoutPost 
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                  : 'border-slate-150 bg-slate-50 hover:bg-slate-100 text-slate-500'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                readoutPost ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300'
+              }`}>
+                {readoutPost && <Check size={10} strokeWidth={3} />}
+              </div>
+              <span className="truncate">Uitlezen NA</span>
+            </button>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between items-center text-[10px] font-bold">
+              <span className="text-slate-550 uppercase tracking-wider">Uitlijnen (Geometrie):</span>
+              <span className={`text-[10px] font-black uppercase tracking-wider ${
+                alignmentStatus === 'none' ? 'text-slate-400' : 'text-emerald-600'
+              }`}>
+                {alignmentStatus === 'none' && 'Nee'}
+                {alignmentStatus === 'intern' && 'Ja (Intern)'}
+                {alignmentStatus === 'extern' && 'Ja (Extern)'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-0.5 rounded-xl text-[10px] font-bold">
+              <button 
+                type="button"
+                onClick={() => setAlignmentStatus('none')}
+                className={`py-1 rounded-lg text-center transition-all select-none ${
+                  alignmentStatus === 'none' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Nee
+              </button>
+              <button 
+                type="button"
+                onClick={() => setAlignmentStatus('intern')}
+                className={`py-1 rounded-lg text-center transition-all select-none ${
+                  alignmentStatus === 'intern' ? 'bg-emerald-600 text-white shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Intern
+              </button>
+              <button 
+                type="button"
+                onClick={() => setAlignmentStatus('extern')}
+                className={`py-1 rounded-lg text-center transition-all select-none ${
+                  alignmentStatus === 'extern' ? 'bg-blue-600 text-white shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Extern
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex justify-between items-center text-[10px] font-bold">
+              <span className="text-slate-550 uppercase tracking-wider">Kalibratie (ADAS):</span>
+              <span className={`text-[10px] font-black uppercase tracking-wider ${
+                calibrationStatus === 'none' ? 'text-slate-400' : 'text-emerald-600'
+              }`}>
+                {calibrationStatus === 'none' && 'Nee'}
+                {calibrationStatus === 'intern' && 'Ja (Intern)'}
+                {calibrationStatus === 'extern' && 'Ja (Extern)'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-0.5 rounded-xl text-[10px] font-bold">
+              <button 
+                type="button"
+                onClick={() => setCalibrationStatus('none')}
+                className={`py-1 rounded-lg text-center transition-all select-none ${
+                  calibrationStatus === 'none' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Nee
+              </button>
+              <button 
+                type="button"
+                onClick={() => setCalibrationStatus('intern')}
+                className={`py-1 rounded-lg text-center transition-all select-none ${
+                  calibrationStatus === 'intern' ? 'bg-emerald-600 text-white shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Intern
+              </button>
+              <button 
+                type="button"
+                onClick={() => setCalibrationStatus('extern')}
+                className={`py-1 rounded-lg text-center transition-all select-none ${
+                  calibrationStatus === 'extern' ? 'bg-blue-600 text-white shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Extern
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 border-t pt-3 border-slate-100 shrink-0">
+          <button 
+            type="button"
+            onClick={saveCurrentDossier}
+            disabled={!licensePlate && !caseNumber}
+            className="py-2.5 px-2 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-blue-500 transition-all shadow-md shadow-blue-200 flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+            title="Bewaar dit dossier in de lokale historie"
+          >
+            <Save size={14} />
+            <span>Opslaan</span>
+          </button>
+          <button 
+            type="button"
+            onClick={downloadPDF}
+            disabled={results.length === 0}
+            className="py-2.5 px-2 bg-slate-900 text-white font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-800 transition-all shadow-md shadow-slate-100 flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-45"
+          >
+            <FileDown size={14} />
+            <span>PDF Rapport</span>
+          </button>
+          <button 
+            type="button"
+            onClick={handleResetAll}
+            className="py-2.5 px-2 bg-white border border-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-1 active:scale-95"
+          >
+            <RefreshCw size={14} />
+            <span>Reset</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100">
       {/* Header */}
@@ -1790,6 +2057,25 @@ export default function App() {
               Sessie Actief: Danny
             </div>
             {userProfile?.role === 'admin' && (
+              <div className="relative">
+                <select
+                  value={view === 'dashboard' ? dashboardTab : ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setView('dashboard');
+                      setDashboardTab(e.target.value as any);
+                    }
+                  }}
+                  className="h-10 pl-3 pr-8 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-black uppercase tracking-wider text-slate-800 transition-all appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/10"
+                >
+                  <option value="verification">📊 Calculatie Verificatie</option>
+                  <option value="photo_analysis">📸 CarVerify Pro</option>
+                  <option value="training_center">🎓 Training Center</option>
+                </select>
+                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
+              </div>
+            )}
+            {userProfile?.role === 'admin' && (
               <button 
                 onClick={() => setView(view === 'admin' ? 'dashboard' : 'admin')}
                 className={`p-2 rounded-lg transition-all ${view === 'admin' ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'text-slate-400 hover:text-amber-600 hover:bg-slate-50'}`}
@@ -1798,14 +2084,6 @@ export default function App() {
                 <Layers size={20} />
               </button>
             )}
-            <button 
-              onClick={() => setIsManualOpen(true)}
-              className="px-3.5 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-100 hover:border-blue-250 rounded-lg flex items-center gap-2 transition-all font-bold text-xs"
-              title="Handleiding"
-            >
-              <HelpCircle size={16} />
-              Handleiding
-            </button>
 
             <button 
               onClick={() => setView(view === 'settings' ? 'dashboard' : 'settings')}
@@ -1829,7 +2107,8 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         {view === 'dashboard' ? (
           <>
-            {/* Top Bar: Dossier Info */}
+            {/* Top Bar: Dossier Info wrapped in false */}
+            {false && (
             <div className="flex flex-col lg:flex-row gap-4 items-stretch">
               <div className="flex-1 bg-white p-6 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-6 items-end">
                 <div className="w-full">
@@ -1909,112 +2188,169 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <button 
-                  onClick={saveCurrentDossier}
-                  disabled={!licensePlate && !caseNumber}
-                  className="px-5 py-4 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-500 transition-all shadow-lg shadow-blue-250 hover:shadow-xl hover:-translate-y-0.5 flex items-center gap-2 active:scale-95 disabled:opacity-55 disabled:pointer-events-none"
-                  title="Bewaar dit dossier in de lokale historie"
-                >
-                  <Save size={18} />
-                  <span>Dossier Opslaan</span>
-                </button>
-                <button 
-                  onClick={downloadPDF}
-                  disabled={results.length === 0}
-                  className="px-5 py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 hover:-translate-y-0.5 flex items-center gap-2 active:scale-95 disabled:opacity-50"
-                >
-                  <FileDown size={18} />
-                  <span>PDF Rapport</span>
-                </button>
-                <button 
-                  onClick={handleResetAll}
-                  className="px-5 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-all flex items-center gap-2 active:scale-95"
-                >
-                  <RefreshCw size={18} />
-                  <span>Reset</span>
-                </button>
+              {/* Right Card: Checklist & Actions */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between md:min-w-[340px] lg:max-w-[380px] gap-4">
+                {/* Checklist Reminders */}
+                <div className="space-y-3 font-sans">
+                  <div className="flex items-center justify-between border-b pb-1.5 border-slate-100">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Voertuig Checklist</p>
+                    <span className="text-[9px] bg-blue-50 text-blue-600 font-bold px-1.5 rounded-full">Stappen</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Uitlezen Voor */}
+                    <button 
+                      onClick={() => setReadoutPre(!readoutPre)}
+                      className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 select-none active:scale-95 text-xs font-bold ${
+                        readoutPre 
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                          : 'border-slate-150 bg-slate-50 hover:bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                        readoutPre ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300'
+                      }`}>
+                        {readoutPre && <Check size={10} strokeWidth={3} />}
+                      </div>
+                      <span className="truncate">Uitlezen VOOR</span>
+                    </button>
+
+                    {/* Uitlezen Na */}
+                    <button 
+                      onClick={() => setReadoutPost(!readoutPost)}
+                      className={`p-2 rounded-xl border text-left transition-all flex items-center gap-2 select-none active:scale-95 text-xs font-bold ${
+                        readoutPost 
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                          : 'border-slate-150 bg-slate-50 hover:bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                        readoutPost ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300'
+                      }`}>
+                        {readoutPost && <Check size={10} strokeWidth={3} />}
+                      </div>
+                      <span className="truncate">Uitlezen NA</span>
+                    </button>
+                  </div>
+
+                  {/* Alignment Toggle */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-slate-500 uppercase tracking-wider">Uitlijnen (Geometrie):</span>
+                      <span className={`text-[10px] font-black uppercase tracking-wider ${
+                        alignmentStatus === 'none' ? 'text-slate-400' : 'text-emerald-600'
+                      }`}>
+                        {alignmentStatus === 'none' && 'Nee'}
+                        {alignmentStatus === 'intern' && 'Ja (Intern)'}
+                        {alignmentStatus === 'extern' && 'Ja (Extern)'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-0.5 rounded-xl text-[10px] font-bold">
+                      <button 
+                        onClick={() => setAlignmentStatus('none')}
+                        className={`py-1 rounded-lg text-center transition-all select-none ${
+                          alignmentStatus === 'none' ? 'bg-white text-slate-850 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        Nee
+                      </button>
+                      <button 
+                        onClick={() => setAlignmentStatus('intern')}
+                        className={`py-1 rounded-lg text-center transition-all select-none ${
+                          alignmentStatus === 'intern' ? 'bg-emerald-600 text-white shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-705'
+                        }`}
+                      >
+                        Intern
+                      </button>
+                      <button 
+                        onClick={() => setAlignmentStatus('extern')}
+                        className={`py-1 rounded-lg text-center transition-all select-none ${
+                          alignmentStatus === 'extern' ? 'bg-blue-600 text-white shadow-sm font-extrabold' : 'text-slate-500 hover:text-slate-705'
+                        }`}
+                      >
+                        Extern
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Calibration Toggle */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-[10px] font-bold">
+                      <span className="text-slate-504 uppercase tracking-wider">Kalibratie (ADAS):</span>
+                      <span className={`text-[10px] font-black uppercase tracking-wider ${
+                        calibrationStatus === 'none' ? 'text-slate-400' : 'text-emerald-600'
+                      }`}>
+                        {calibrationStatus === 'none' && 'Nee'}
+                        {calibrationStatus === 'intern' && 'Ja (Intern)'}
+                        {calibrationStatus === 'extern' && 'Ja (Extern)'}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 bg-slate-100 p-0.5 rounded-xl text-[10px] font-bold">
+                      <button 
+                        onClick={() => setCalibrationStatus('none')}
+                        className={`py-1 rounded-lg text-center transition-all select-none ${
+                          calibrationStatus === 'none' ? 'bg-white text-slate-850 shadow-sm' : 'text-slate-505 hover:text-slate-700'
+                        }`}
+                      >
+                        Nee
+                      </button>
+                      <button 
+                        onClick={() => setCalibrationStatus('intern')}
+                        className={`py-1 rounded-lg text-center transition-all select-none ${
+                          calibrationStatus === 'intern' ? 'bg-emerald-600 text-white shadow-sm font-extrabold' : 'text-slate-505 hover:text-slate-705'
+                        }`}
+                      >
+                        Intern
+                      </button>
+                      <button 
+                        onClick={() => setCalibrationStatus('extern')}
+                        className={`py-1 rounded-lg text-center transition-all select-none ${
+                          calibrationStatus === 'extern' ? 'bg-blue-600 text-white shadow-sm font-extrabold' : 'text-slate-505 hover:text-slate-705'
+                        }`}
+                      >
+                        Extern
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Compact Action Buttons */}
+                <div className="grid grid-cols-3 gap-2 border-t pt-3 border-slate-100 shrink-0">
+                  <button 
+                    onClick={saveCurrentDossier}
+                    disabled={!licensePlate && !caseNumber}
+                    className="py-2.5 px-2 bg-blue-600 text-white font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-blue-500 transition-all shadow-md shadow-blue-200 flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-40 disabled:pointer-events-none"
+                    title="Bewaar dit dossier in de lokale historie"
+                  >
+                    <Save size={14} />
+                    <span>Opslaan</span>
+                  </button>
+                  <button 
+                    onClick={downloadPDF}
+                    disabled={results.length === 0}
+                    className="py-2.5 px-2 bg-slate-900 text-white font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-800 transition-all shadow-md shadow-slate-100 flex flex-col items-center justify-center gap-1 active:scale-95 disabled:opacity-45"
+                  >
+                    <FileDown size={14} />
+                    <span>PDF Rapport</span>
+                  </button>
+                  <button 
+                    onClick={handleResetAll}
+                    className="py-2.5 px-2 bg-white border border-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-wider rounded-xl hover:bg-slate-50 transition-all flex flex-col items-center justify-center gap-1 active:scale-95"
+                  >
+                    <RefreshCw size={14} />
+                    <span>Reset</span>
+                  </button>
+                </div>
               </div>
             </div>
-
-            {/* Tab Selector Buttons - Only visible to admins */}
-            {userProfile?.role === 'admin' && (
-              <div className="flex bg-slate-100 hover:bg-slate-100/80 p-1 rounded-2xl max-w-2xl shadow-inner select-none mb-6 gap-1 flex-wrap sm:flex-nowrap">
-                <button
-                  onClick={() => setDashboardTab('verification')}
-                  className={`flex-1 py-2.5 px-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
-                    dashboardTab === 'verification'
-                      ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <ClipboardCheck size={14} />
-                  <span>Calculatie Verificatie</span>
-                </button>
-                <button
-                  onClick={() => setDashboardTab('photo_analysis')}
-                  className={`flex-1 py-2.5 px-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
-                    dashboardTab === 'photo_analysis'
-                      ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Camera size={14} />
-                  <span>CarVerify Pro</span>
-                </button>
-                <button
-                  onClick={() => setDashboardTab('training_center')}
-                  className={`flex-1 py-2.5 px-3 text-xs font-black uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 whitespace-nowrap ${
-                    dashboardTab === 'training_center'
-                      ? 'bg-white text-blue-600 shadow-md shadow-blue-50/50'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <GraduationCap size={14} />
-                  <span>CarVerify Training Centre</span>
-                </button>
-              </div>
             )}
 
             {dashboardTab === 'verification' ? (
               <>
-                {/* Visual Alerts for Critical Requirements */}
-                {(calibrationData.needsCalibration || calibrationData.needsAlignment) && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="p-5 rounded-3xl bg-amber-50/70 border-2 border-amber-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 text-left mb-6"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-amber-200/50 font-bold text-xl">
-                        ⚠️
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="font-black text-slate-800 text-sm uppercase tracking-tight">
-                          Vereiste Werkzaamheden Gedetecteerd!
-                        </h4>
-                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                          {calibrationData.needsCalibration && "• [ADAS KALIBRATIE] Vereist op basis van de ingevoerde calculatietekst of onderdelen. "}
-                          {calibrationData.needsAlignment && "• [WIELUITLIJNEN (CODE 74)] Vereist wegens wielophanging componenten (draagarm, fusee, wielnaaf, etc.) of expliciete uitlijn-code."}
-                        </p>
-                        <div className="flex flex-col md:flex-row gap-2 mt-2 pt-1">
-                          {calibrationData.needsCalibration && calibrationData.calibrationReason && (
-                            <span className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50/70 px-2 py-0.5 rounded border border-blue-100 max-w-max">
-                              Kalibratie: {calibrationData.calibrationReason}
-                            </span>
-                          )}
-                          {calibrationData.needsAlignment && calibrationData.alignmentReason && (
-                            <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-50/70 px-2 py-0.5 rounded border border-emerald-100 max-w-max">
-                              Uitlijnen: {calibrationData.alignmentReason}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
+                {/* Dossier Bar - Placed completely at the top */}
+                {renderDossierBar()}
 
-                {/* Inputs - Side-by-side and placed directly at the top for immediate access */}
+                {/* Inputs - Side-by-side */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <InputSection 
                 title="Eindcalculatie" 
@@ -2035,166 +2371,73 @@ export default function App() {
               />
             </div>
 
-
-
-            {/* Main Stats: Financials vs Breakdown */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Primary Financial Overview */}
-              <div className="lg:col-span-1 grid grid-cols-1 gap-4">
-                <div className="bg-blue-600 p-6 rounded-3xl shadow-xl shadow-blue-100 text-white relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-125 transition-transform duration-700">
-                    <ClipboardCheck size={120} />
-                  </div>
-                  <div className="relative z-10 space-y-4">
-                    <p className="text-xs font-bold uppercase tracking-widest text-blue-100">Totaal Geverifieerd</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-2xl font-bold opacity-80">€</span>
-                      <h3 className="text-5xl font-black tracking-tighter">{stats.totalVerifiedAmount.toFixed(2)}</h3>
-                    </div>
-                    <div className="pt-4 border-t border-white/10 flex items-center justify-between text-blue-100">
-                      <span className="text-xs font-medium">Inclusief aangepaste regels</span>
-                      <CheckCircle2 size={20} className="text-blue-200" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prijsverschil</p>
-                    <div className="flex items-center gap-2">
-                       <h3 className={`text-2xl font-black ${stats.totalPriceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                        € {stats.totalPriceDiff.toFixed(2)}
-                      </h3>
-                      <RefreshCw size={18} className={`text-amber-400 ${stats.totalPriceDiff !== 0 ? 'animate-spin-slow' : ''}`} />
-                    </div>
-                  </div>
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${stats.totalPriceDiff > 0 ? 'bg-amber-50 text-amber-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                    <AlertCircle size={24} />
-                  </div>
-                </div>
-
-                {/* ADAS / Uitlijn Status Card */}
-                <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between space-y-4 group hover:border-blue-250 transition-all text-left">
-                  <div className="space-y-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Voertuigvereisten (uit calculatie)</p>
-                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Kalibreren & Uitlijnen</h4>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3">
-                    {/* Calibration Item */}
-                    <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-slate-50/70 border border-slate-100 transition-all hover:bg-slate-100/50">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${calibrationData.needsCalibration ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`} />
-                          Kalibreren (ADAS)
-                        </span>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${calibrationData.needsCalibration ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-slate-200 text-slate-500'}`}>
-                          {calibrationData.needsCalibration ? 'Ja, Vereist' : 'Nee'}
-                        </span>
-                      </div>
-                      {calibrationData.needsCalibration && calibrationData.calibrationReason ? (
-                        <span className="text-[9px] font-mono px-2 py-1 bg-blue-50/50 text-blue-700 rounded-lg border border-blue-100/30 truncate max-w-full block font-medium" title={calibrationData.calibrationReason}>
-                          🔍 {calibrationData.calibrationReason}
-                        </span>
-                      ) : (
-                        <span className="text-[9px] text-slate-400 font-medium">Geen kalibratie-instructies aangetroffen</span>
-                      )}
-                    </div>
-
-                    {/* Alignment Item */}
-                    <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-slate-50/70 border border-slate-100 transition-all hover:bg-slate-100/50">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${calibrationData.needsAlignment ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`} />
-                          Uitlijnen (Wielgeometrie)
-                        </span>
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${calibrationData.needsAlignment ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-200 text-slate-500'}`}>
-                          {calibrationData.needsAlignment ? 'Ja, Vereist' : 'Nee'}
-                        </span>
-                      </div>
-                      {calibrationData.needsAlignment && calibrationData.alignmentReason ? (
-                        <span className="text-[9px] font-mono px-2 py-1 bg-emerald-50/50 text-emerald-600 rounded-lg border border-emerald-100/30 truncate max-w-full block font-medium" title={calibrationData.alignmentReason}>
-                          📐 {calibrationData.alignmentReason}
-                        </span>
-                      ) : (
-                        <span className="text-[9px] text-slate-400 font-medium">Geen uitlijn-instructies aangetroffen</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Scanned Audatex Codes List */}
-                  {detectedAudatexCodes.length > 0 && (
-                    <div className="pt-3 border-t border-slate-150">
-                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Gedetecteerde Actieve Codes ({detectedAudatexCodes.length})</p>
-                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-                        {detectedAudatexCodes.map((c, idx) => (
-                          <span 
-                            key={c.code + idx} 
-                            className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-lg bg-indigo-50/70 text-indigo-750 border border-indigo-100/40"
-                            title={c.description}
-                          >
-                            <span className="font-mono bg-indigo-600 text-white px-1 py-0.2 rounded text-[8px] font-extrabold">{c.code}</span>
-                            <span className="truncate max-w-[130px] font-medium">{c.description}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
+            {/* Compact Performance Statistics Toolbar */}
+            <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 items-stretch">
+              {/* Totaal Geverifieerd Bedrag */}
+              <div className="bg-blue-600 p-4 rounded-2xl text-white relative overflow-hidden flex flex-col justify-center min-h-[72px]">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-105">Geverifieerd</p>
+                <p className="text-xl font-black">€ {stats.totalVerifiedAmount.toFixed(2)}</p>
               </div>
 
-              {/* Status Breakdown Grid */}
-              <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-3 gap-3">
-                <StatsCard 
-                  label="Totaal Regels" 
-                  value={calculationParts.length} 
-                  icon={<FileText className="text-blue-600" />} 
-                  color="bg-blue-50 text-blue-700"
-                  isActive={statusFilter === 'all'}
-                  isFilterable={true}
-                  onClick={() => setStatusFilter('all')}
-                />
-                <StatsCard 
-                  label="Match OK" 
-                  value={stats.matched} 
-                  icon={<CheckCircle2 className="text-emerald-600" />} 
-                  color="bg-emerald-50 text-emerald-700"
-                  isActive={statusFilter === 'matched'}
-                  isFilterable={true}
-                  onClick={() => setStatusFilter(statusFilter === 'matched' ? 'all' : 'matched')}
-                />
-                <StatsCard 
-                  label="Handmatig" 
-                  value={stats.approved} 
-                  icon={<ShieldCheck className="text-amber-600" />} 
-                  color="bg-amber-50 text-amber-700"
-                  isActive={statusFilter === 'approved'}
-                  isFilterable={true}
-                  onClick={() => setStatusFilter(statusFilter === 'approved' ? 'all' : 'approved')}
-                />
-                <StatsCard 
-                  label="Afwijking" 
-                  value={stats.deviations} 
-                  icon={<AlertCircle className="text-rose-600" />} 
-                  color="bg-rose-50 text-rose-700"
-                  isActive={statusFilter === 'deviation'}
-                  isFilterable={true}
-                  onClick={() => setStatusFilter(statusFilter === 'deviation' ? 'all' : 'deviation')}
-                />
-                <StatsCard 
-                  label="Ontbrekend" 
-                  value={stats.missing} 
-                  icon={<XCircle className="text-rose-600" />} 
-                  color="bg-rose-50 text-rose-700"
-                  isActive={statusFilter === 'missing'}
-                  isFilterable={true}
-                  onClick={() => setStatusFilter(statusFilter === 'missing' ? 'all' : 'missing')}
-                />
-                <div className="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-200 flex flex-col justify-center items-center text-center space-y-0.5">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Calculatie Bron</p>
-                  <p className="text-xs font-bold text-slate-600">Automatisering Actief</p>
-                </div>
-              </div>
+              {/* Totaal Regels */}
+              <button 
+                type="button"
+                onClick={() => setStatusFilter('all')}
+                className={`p-3 rounded-2xl border text-left flex flex-col justify-center transition-all select-none active:scale-98 min-h-[72px] ${
+                  statusFilter === 'all' ? 'border-blue-500 bg-blue-50/70 shadow-sm ring-2 ring-blue-100' : 'border-slate-100 bg-slate-50 hover:bg-slate-100'
+                }`}
+              >
+                <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider">Totaal Regels</p>
+                <p className="text-lg font-black text-slate-800">{calculationParts.length}</p>
+              </button>
+
+              {/* Match OK */}
+              <button 
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'matched' ? 'all' : 'matched')}
+                className={`p-3 rounded-2xl border text-left flex flex-col justify-center transition-all select-none active:scale-98 min-h-[72px] ${
+                  statusFilter === 'matched' ? 'border-emerald-500 bg-emerald-50 shadow-sm ring-2 ring-emerald-100' : 'border-slate-100 bg-slate-50 hover:bg-emerald-50/10'
+                }`}
+              >
+                <p className="text-[9px] font-black text-emerald-600 uppercase tracking-wider">Match OK</p>
+                <p className="text-lg font-black text-emerald-700">{stats.matched}</p>
+              </button>
+
+              {/* Handmatig */}
+              <button 
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'approved' ? 'all' : 'approved')}
+                className={`p-3 rounded-xl border text-left flex flex-col justify-center transition-all select-none active:scale-98 min-h-[72px] ${
+                  statusFilter === 'approved' ? 'border-amber-500 bg-amber-50 shadow-sm ring-2 ring-amber-100' : 'border-slate-100 bg-slate-50 hover:bg-amber-50/10'
+                }`}
+              >
+                <p className="text-[9px] font-black text-amber-600 uppercase tracking-wider">Handmatig</p>
+                <p className="text-lg font-black text-amber-700">{stats.approved}</p>
+              </button>
+
+              {/* Afwijking */}
+              <button 
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'deviation' ? 'all' : 'deviation')}
+                className={`p-3 rounded-2xl border text-left flex flex-col justify-center transition-all select-none active:scale-98 min-h-[72px] ${
+                  statusFilter === 'deviation' ? 'border-rose-500 bg-rose-50 border-rose-200 shadow-sm ring-2 ring-rose-100' : 'border-slate-100 bg-slate-50 hover:bg-rose-50/10'
+                }`}
+              >
+                <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Afwijking</p>
+                <p className="text-lg font-black text-rose-700">{stats.deviations}</p>
+              </button>
+
+              {/* Ontbrekend */}
+              <button 
+                type="button"
+                onClick={() => setStatusFilter(statusFilter === 'missing' ? 'all' : 'missing')}
+                className={`p-3 rounded-2xl border text-left flex flex-col justify-center transition-all select-none active:scale-98 min-h-[72px] ${
+                  statusFilter === 'missing' ? 'border-rose-500 bg-rose-50 border-rose-200 shadow-sm ring-2 ring-rose-100' : 'border-slate-100 bg-slate-50 hover:bg-rose-50/10'
+                }`}
+              >
+                <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Ontbrekend</p>
+                <p className="text-lg font-black text-rose-700">{stats.missing}</p>
+              </button>
             </div>
 
 
@@ -2586,16 +2829,16 @@ export default function App() {
                                ) : res.manualPrice !== undefined ? (
                                  <div 
                                    onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
-                                   className="p-2.5 rounded-2xl border-2 bg-emerald-50 border-emerald-200 hover:bg-emerald-100 cursor-pointer shadow-sm flex items-center justify-between transition-all"
+                                   className="p-1.5 rounded-xl border bg-emerald-50 border-emerald-200 hover:bg-emerald-100 cursor-pointer shadow-sm flex items-center justify-between transition-all"
                                  >
                                    <div className="flex flex-col gap-1">
                                      <div className="flex items-center gap-1.5">
                                        <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
                                           {res.calc.id}
                                         </span>
-                                       <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/50 px-1.5 py-0.5 rounded-md uppercase tracking-wider">Aangepast</span>
+                                       <span className="text-[8px] font-black text-emerald-800 bg-emerald-100/55 px-1 py-0.5 rounded uppercase tracking-wider">Aangepast</span>
                                      </div>
-                                     <div className="text-emerald-700 font-black text-base">
+                                     <div className="text-emerald-700 font-black text-sm">
                                        € {res.manualPrice?.toFixed(2)}
                                      </div>
                                    </div>
@@ -2610,13 +2853,13 @@ export default function App() {
                                ) : res.match ? (
                                  <div 
                                    onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
-                                   className={`p-3 rounded-2xl border-2 cursor-pointer transition-all shadow-md ${
+                                   className={`p-1.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
                                      res.status === 'matched' 
                                        ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
-                                       : 'bg-rose-50 border-rose-300 hover:bg-rose-100 ring-2 ring-rose-500/10'
+                                       : 'bg-rose-50 border-rose-200 hover:bg-rose-100'
                                    }`}
                                  >
-                                   <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                                   <div className="flex items-center gap-1 mb-1 flex-wrap">
                                      <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
                                         {res.calc.id}
                                       </span>
@@ -2631,7 +2874,7 @@ export default function App() {
                                    </div>
                                    
                                    {res.status === 'deviation' ? (
-                                      <div className="mt-1.5 p-2.5 bg-emerald-600 rounded-xl text-white shadow-md border border-emerald-500 flex flex-col gap-1.5">
+                                      <div className="mt-1 p-1.5 bg-emerald-600 rounded-lg text-white shadow-sm border border-emerald-500 flex flex-col gap-1">
                                         <div className="flex items-center justify-between">
                                           <span className="text-[10px] uppercase font-black tracking-widest text-emerald-100 flex items-center gap-1">
                                             <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
@@ -2641,13 +2884,13 @@ export default function App() {
                                             {res.calc.id}
                                           </span>
                                         </div>
-                                       <span className="font-black text-lg leading-tight">
+                                       <span className="font-black text-sm leading-tight">
                                          € {res.match.price.toFixed(2)}
                                        </span>
                                      </div>
                                    ) : (
                                      <div className="flex items-center gap-2">
-                                       <span className="font-black text-base text-emerald-600">
+                                       <span className="font-black text-xs text-emerald-600">
                                          € {res.match.price.toFixed(2)}
                                        </span>
                                        <code className="text-[10px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/50 whitespace-nowrap">
@@ -2659,7 +2902,7 @@ export default function App() {
                                ) : (
                                  <div 
                                    onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
-                                   className="p-2.5 rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-all flex items-center gap-2 text-blue-600 hover:text-blue-700 font-bold text-xs"
+                                   className="p-1.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300 cursor-pointer transition-all flex items-center gap-1.5 text-blue-600 hover:text-blue-700 font-bold text-[10px]"
                                  >
                                    <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
                                       {res.calc.id}
@@ -2717,31 +2960,35 @@ export default function App() {
             </div>
           </>
         ) : userProfile?.role === "admin" ? (
-          dashboardTab === 'photo_analysis' ? (
-            <PhotoAnalysisTab 
-              mode="analysis"
-              licensePlate={licensePlate}
-              vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
-              onApplySuggestedAE={(ae) => {
-                setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
-              }}
-              db={db}
-              userId={user?.uid}
-              calcInput={calcInput}
-            />
-          ) : (
-            <PhotoAnalysisTab 
-              mode="training"
-              licensePlate={licensePlate}
-              vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
-              onApplySuggestedAE={(ae) => {
-                setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
-              }}
-              db={db}
-              userId={user?.uid}
-              calcInput={calcInput}
-            />
-          )
+          <div className="space-y-6">
+            {renderDossierBar()}
+            
+            {dashboardTab === 'photo_analysis' ? (
+              <PhotoAnalysisTab 
+                mode="analysis"
+                licensePlate={licensePlate}
+                vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
+                onApplySuggestedAE={(ae) => {
+                  setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
+                }}
+                db={db}
+                userId={user?.uid}
+                calcInput={calcInput}
+              />
+            ) : (
+              <PhotoAnalysisTab 
+                mode="training"
+                licensePlate={licensePlate}
+                vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
+                onApplySuggestedAE={(ae) => {
+                  setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
+                }}
+                db={db}
+                userId={user?.uid}
+                calcInput={calcInput}
+              />
+            )}
+          </div>
         ) : (
           <div className="p-8 text-center text-rose-600 bg-rose-50 border border-rose-100 rounded-3xl font-bold">
             U heeft geen toegang tot CarVerify Pro. Neem contact op met Danny.
