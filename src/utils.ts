@@ -200,6 +200,94 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
+    // Check for high-fidelity row with discount and quantity
+    // Example: 1792652 BOUT 4,0 € 3,23 21,00 % 27,0 % € 9,43
+    // Match structure: PartNumber Description Quantity UnitPrice VAT% Discount% TotalPrice
+    const smartWithDiscount = trimmed.match(
+      /^([A-Z0-9\s.-]{5,})\s+(.+?)\s+(\d+[,.]\d+|\d+)\s*(?:pcs|st|stk|stuks|x)?\s*€?\s*(\d+[,.]\d{2})\s+(\d+[,.]\d{2}|\d+)\s*%\s+(\d+[,.]\d{2}|\d+)\s*%\s*€?\s*(\d+[,.]\d{2})/i
+    );
+
+    if (smartWithDiscount) {
+      const partNumber = smartWithDiscount[1].trim();
+      const description = smartWithDiscount[2].trim();
+      
+      const qtyStr = smartWithDiscount[3].replace(',', '.');
+      const qty = parseFloat(qtyStr);
+      
+      const unitPriceStr = smartWithDiscount[4].replace(',', '.');
+      const unitPrice = parseFloat(unitPriceStr);
+      
+      if (!isNaN(qty) && !isNaN(unitPrice)) {
+        const computedEndPrice = qty * unitPrice;
+        parts.push({
+          id: '',
+          partNumber: partNumber,
+          description: description,
+          price: Number(computedEndPrice.toFixed(2)),
+          originalLine: trimmed
+        });
+        continue;
+      }
+    }
+
+    // Check for row with quantity and unit price but only VAT (no discount)
+    // Example: 1792652 BOUT 4,0 € 3,23 21,00 % € 12,92
+    const smartWithVatOnly = trimmed.match(
+      /^([A-Z0-9\s.-]{5,})\s+(.+?)\s+(\d+[,.]\d+|\d+)\s*(?:pcs|st|stk|stuks|x)?\s*€?\s*(\d+[,.]\d{2})\s+(\d+[,.]\d{2}|\d+)\s*%\s*€?\s*(\d+[,.]\d{2})/i
+    );
+
+    if (smartWithVatOnly) {
+      const partNumber = smartWithVatOnly[1].trim();
+      const description = smartWithVatOnly[2].trim();
+      
+      const qtyStr = smartWithVatOnly[3].replace(',', '.');
+      const qty = parseFloat(qtyStr);
+      
+      const unitPriceStr = smartWithVatOnly[4].replace(',', '.');
+      const unitPrice = parseFloat(unitPriceStr);
+      
+      if (!isNaN(qty) && !isNaN(unitPrice)) {
+        const computedEndPrice = qty * unitPrice;
+        parts.push({
+          id: '',
+          partNumber: partNumber,
+          description: description,
+          price: Number(computedEndPrice.toFixed(2)),
+          originalLine: trimmed
+        });
+        continue;
+      }
+    }
+
+    // Check for row with quantity and unit price, no VAT or discount
+    // Example: 1792652 BOUT 4,0 x € 3,23 € 12,92
+    const smartWithNoTax = trimmed.match(
+      /^([A-Z0-9\s.-]{5,})\s+(.+?)\s+(\d+[,.]\d+|\d+)\s*(?:pcs|st|stk|stuks|x)?\s*€?\s*(\d+[,.]\d{2})\s+€?\s*(\d+[,.]\d{2})/i
+    );
+
+    if (smartWithNoTax) {
+      const partNumber = smartWithNoTax[1].trim();
+      const description = smartWithNoTax[2].trim();
+      
+      const qtyStr = smartWithNoTax[3].replace(',', '.');
+      const qty = parseFloat(qtyStr);
+      
+      const unitPriceStr = smartWithNoTax[4].replace(',', '.');
+      const unitPrice = parseFloat(unitPriceStr);
+      
+      if (!isNaN(qty) && !isNaN(unitPrice)) {
+        const computedEndPrice = qty * unitPrice;
+        parts.push({
+          id: '',
+          partNumber: partNumber,
+          description: description,
+          price: Number(computedEndPrice.toFixed(2)),
+          originalLine: trimmed
+        });
+        continue;
+      }
+    }
+
     // Find all currency-like amounts. We exclude numbers followed by '%' to avoid picking up tax/discount rates.
     // Enhanced regex to capture thousand separators (e.g. 1.573,25)
     const priceMatches = Array.from(trimmed.matchAll(/(?:€\s*)?(\d+[\.\s]\d+[,.]\d{2}|\d+[,.]\d{2})(?!\s*%)/g));
