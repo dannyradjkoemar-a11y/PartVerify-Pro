@@ -145,7 +145,7 @@ export default function App() {
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
   const [dimUnchanged, setDimUnchanged] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing' | 'extra'>('all');
 
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
@@ -1129,7 +1129,7 @@ export default function App() {
       // Handle floating point precision, ignore differences < 0.005
       const hasRealDiff = Math.abs(priceDiff) > 0.005;
 
-      let status: 'matched' | 'deviation' | 'missing' | 'approved' | 'removed' = 'missing';
+      let status: 'matched' | 'deviation' | 'missing' | 'approved' | 'removed' | 'extra' = 'missing';
       
       if (removedPartIds.has(calcPart.id)) {
         status = 'removed';
@@ -1156,13 +1156,14 @@ export default function App() {
 
     const combinedResults = allResults;
 
-    // Custom sorting: OK -> Deviation -> Missing -> Approved (Manual) -> Removed
+    // Custom sorting: OK -> Deviation -> Extra -> Missing -> Approved (Manual) -> Removed
     const statusOrder = {
       'matched': 0,
       'deviation': 1,
-      'missing': 2,
-      'approved': 3,
-      'removed': 4
+      'extra': 2,
+      'missing': 3,
+      'approved': 4,
+      'removed': 5
     };
 
     return combinedResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
@@ -1173,6 +1174,7 @@ export default function App() {
     const deviations = results.filter(r => r.status === 'deviation').length;
     const missing = results.filter(r => r.status === 'missing').length;
     const approved = results.filter(r => r.status === 'approved').length;
+    const extra = results.filter(r => r.status === 'extra').length;
     const totalPriceDiff = results
       .filter(r => r.status !== 'removed')
       .reduce((acc, r) => acc + r.priceDiff, 0);
@@ -1182,7 +1184,7 @@ export default function App() {
       .filter(r => r.status !== 'removed' && r.status !== 'missing')
       .reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? 0), 0);
 
-    return { matched, deviations, missing, approved, totalPriceDiff, totalVerifiedAmount };
+    return { matched, deviations, missing, approved, extra, totalPriceDiff, totalVerifiedAmount };
   }, [results]);
 
   const calibrationData = useMemo(() => {
@@ -2823,6 +2825,11 @@ export default function App() {
                                   <Trash2 size={16} />
                                   VERWIJDERD
                                 </div>
+                              ) : res.status === 'extra' ? (
+                                <div className="flex items-center gap-2 text-purple-600">
+                                  <Package size={16} />
+                                  EXTRA FACTUUR
+                                </div>
                               ) : (
                                 <div className="flex items-center gap-2 text-rose-500">
                                   <XCircle size={16} />
@@ -2847,6 +2854,10 @@ export default function App() {
                                 <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-405 border border-slate-200 line-through font-mono">
                                   {res.calc.id}
                                 </span>
+                              ) : res.status === 'extra' ? (
+                                <span className="inline-flex items-center justify-center font-black text-[9px] uppercase tracking-widest px-2 py-0.5 rounded bg-purple-50 text-purple-750 border border-purple-200 shadow-xs">
+                                  EXTRA
+                                </span>
                               ) : (
                                 <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
                                   {res.calc.id}
@@ -2862,7 +2873,7 @@ export default function App() {
                                   className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               ) : (
-                                <div className={`font-semibold text-sm text-slate-800 ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>{res.calc.description}</div>
+                                <div className={`font-semibold text-sm ${res.status === 'extra' ? 'text-slate-400 italic font-medium' : 'text-slate-800'} ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>{res.calc.description}</div>
                               )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
@@ -2896,8 +2907,10 @@ export default function App() {
                                     className="w-24 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-base font-black focus:ring-1 focus:ring-blue-500 outline-none"
                                   />
                                 </div>
+                              ) : res.status === 'extra' ? (
+                                <span className="text-slate-350 font-bold text-sm select-none">—</span>
                               ) : (
-                                <div className="flex items-center gap-2 group/price-cell font-sans">
+                                <div className="flex items-center gap-2 group/price-cell">
                                   {res.status === 'deviation' ? (
                                     <div className="flex flex-col">
                                       <span className="text-slate-400 line-through decoration-rose-500 decoration-2 text-sm font-black">
@@ -2977,6 +2990,8 @@ export default function App() {
                                    className={`p-1.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
                                      res.status === 'matched' 
                                        ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                                       : res.status === 'extra'
+                                       ? 'bg-purple-50/75 border-purple-200 hover:bg-purple-100/75 text-purple-900 border'
                                        : 'bg-rose-50 border-rose-200 hover:bg-rose-100'
                                    }`}
                                  >
@@ -3011,7 +3026,7 @@ export default function App() {
                                      </div>
                                    ) : (
                                      <div className="flex items-center gap-2">
-                                       <span className={`font-black text-xs text-emerald-600`}>
+                                       <span className={`font-black text-xs ${res.status === 'extra' ? 'text-purple-650' : 'text-emerald-600'}`}>
                                          € {res.match.price.toFixed(2)}
                                        </span>
                                        <code className="text-[10px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/50 whitespace-nowrap">
@@ -3034,8 +3049,8 @@ export default function App() {
                              </td>
                             <td className="px-6 py-4">
                               {res.priceDiff !== 0 ? (
-                                <span className={`font-black text-base ${res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                  {res.priceDiff > 0 ? '+' : ''}{res.priceDiff.toFixed(2)}
+                                <span className={`font-black text-base ${res.status === 'extra' ? 'text-purple-650 font-black' : res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                  {res.status === 'extra' ? '€ ' : res.priceDiff > 0 ? '+' : ''}{res.priceDiff.toFixed(2)}
                                 </span>
                               ) : (
                                 <span className="text-slate-305 font-bold">—</span>
@@ -3605,14 +3620,6 @@ export default function App() {
           />
         )}
       </AnimatePresence>
-
-      {/* Vaste prijsafspraken side tab hover slide-out drawer */}
-      {view === 'dashboard' && (
-        <HoverAgreementsTab 
-          selectedClientId={selectedClientId} 
-          clients={clients} 
-        />
-      )}
     </div>
   );
 }
@@ -3739,7 +3746,6 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
   const [clients, setClients] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'logs' | 'history'>('clients');
   const [historySearch, setHistorySearch] = useState("");
-  const [localToast, setLocalToast] = useState<string | null>(null);
 
   const filteredDossiers = useMemo(() => {
     if (!savedDossiers) return [];
@@ -3765,11 +3771,6 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
   const [newPartDescription, setNewPartDescription] = useState("");
   const [newPartPrice, setNewPartPrice] = useState("");
 
-  const [adminPriceUitlezen, setAdminPriceUitlezen] = useState("");
-  const [adminPriceUitlijnen, setAdminPriceUitlijnen] = useState("");
-  const [adminPriceKoelvloeistof, setAdminPriceKoelvloeistof] = useState("");
-  const [adminPriceAntiroest, setAdminPriceAntiroest] = useState("");
-
   const loadData = async () => {
     const uDocs = await getDocs(collection(db, "users"));
     setUsers(uDocs.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -3792,38 +3793,8 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
         setClientPrices(pDocs.docs.map(d => ({ id: d.id, ...d.data() })));
       };
       loadPrices();
-
-      const currentClient = clients.find(c => c.id === selectedAdminClient);
-      if (currentClient) {
-        setAdminPriceUitlezen(currentClient.priceUitlezen !== undefined ? String(currentClient.priceUitlezen) : "");
-        setAdminPriceUitlijnen(currentClient.priceUitlijnen !== undefined ? String(currentClient.priceUitlijnen) : "");
-        setAdminPriceKoelvloeistof(currentClient.priceKoelvloeistof !== undefined ? String(currentClient.priceKoelvloeistof) : "");
-        setAdminPriceAntiroest(currentClient.priceAntiroest !== undefined ? String(currentClient.priceAntiroest) : "");
-      }
     }
-  }, [selectedAdminClient, clients]);
-
-  const saveAgreements = async () => {
-    if (!selectedAdminClient) return;
-    try {
-      const clientRef = doc(db, "clients", selectedAdminClient);
-      const updatedData = {
-        priceUitlezen: parseFloat(adminPriceUitlezen.replace(',', '.')) || 0,
-        priceUitlijnen: parseFloat(adminPriceUitlijnen.replace(',', '.')) || 0,
-        priceKoelvloeistof: parseFloat(adminPriceKoelvloeistof.replace(',', '.')) || 0,
-        priceAntiroest: parseFloat(adminPriceAntiroest.replace(',', '.')) || 0,
-      };
-      await updateDoc(clientRef, updatedData);
-      
-      setClients(prev => prev.map(c => c.id === selectedAdminClient ? { ...c, ...updatedData } : c));
-      
-      setLocalToast("Vaste prijsafspraken succesvol opgeslagen!");
-      setTimeout(() => setLocalToast(null), 3050);
-    } catch (err) {
-      console.error("Fout bij opslaan prijsafspraken:", err);
-      alert("Fout bij opslaan prijsafspraken!");
-    }
-  };
+  }, [selectedAdminClient]);
 
   const createUser = async () => {
     alert("Om beveiligingsredenen moet u de gebruiker eerst aanmaken in de Firebase Console.\nZodra aangemaakt, voeg ik hier de rol toe aan Firestore.");
@@ -3955,82 +3926,10 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
               <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-8">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xl font-bold">Prijslijst: {clients.find(c => c.id === selectedAdminClient)?.name}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase bg-slate-100 px-3 py-1 rounded-full col-span-2">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase bg-slate-100 px-3 py-1 rounded-full">
                     Tip: Voeg meerdere regels toe voor verschillende varianten (bv. luxe/normaal)
                   </p>
                 </div>
-
-                {/* Vaste Prijsafspraken Section */}
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4 shadow-sm">
-                  <div className="flex items-center gap-2 text-slate-800">
-                    <ClipboardCheck size={18} className="text-amber-600" />
-                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-600">Vaste Prijsafspraken (Subvelden)</h4>
-                  </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Uitlezen (Voor/Na)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
-                        <input 
-                          type="text" 
-                          value={adminPriceUitlezen}
-                          onChange={(e) => setAdminPriceUitlezen(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Uitlijnen</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
-                        <input 
-                          type="text" 
-                          value={adminPriceUitlijnen}
-                          onChange={(e) => setAdminPriceUitlijnen(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Koelvloeistof</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
-                        <input 
-                          type="text" 
-                          value={adminPriceKoelvloeistof}
-                          onChange={(e) => setAdminPriceKoelvloeistof(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Antiroest</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
-                        <input 
-                          type="text" 
-                          value={adminPriceAntiroest}
-                          onChange={(e) => setAdminPriceAntiroest(e.target.value)}
-                          placeholder="0.00"
-                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex justify-end pt-1">
-                    <button 
-                      onClick={saveAgreements}
-                      className="px-5 py-2 bg-slate-900 text-white font-bold rounded-lg text-xs hover:bg-slate-800 transition-all shadow-sm active:scale-95"
-                    >
-                      Afspraken Opslaan
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-slate-100 my-4"></div>
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <div className="md:col-span-1">
@@ -4337,119 +4236,6 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
           )}
         </div>
       )}
-      {localToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-slate-800 text-white px-5 py-3.5 rounded-2xl shadow-xl flex items-center gap-3 animate-pulse">
-          <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-          <span className="text-xs font-bold font-sans">{localToast}</span>
-        </div>
-      )}
-    </motion.div>
-  );
-}
-
-function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: string, clients: any[] }) {
-  const [isHovered, setIsHovered] = useState(false);
-  const currentClient = clients.find(c => c.id === selectedClientId);
-
-  const formatPrice = (val: any) => {
-    if (val === undefined || val === null || val === "" || isNaN(Number(val)) || Number(val) === 0) {
-      return "Geen";
-    }
-    return `€ ${Number(val).toFixed(2)}`;
-  };
-
-  return (
-    <motion.div
-      initial={{ x: "280px" }}
-      animate={{ x: isHovered ? "0px" : "280px" }}
-      transition={{ type: "spring", stiffness: 350, damping: 30 }}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      className="fixed right-0 top-1/4 z-40 flex items-start select-none"
-    >
-      {/* Lipje (Tab) */}
-      <div 
-        onClick={() => setIsHovered(!isHovered)}
-        className="bg-slate-900 border border-r-0 border-slate-800 hover:bg-slate-800 text-white py-4 px-2 text-center rounded-l-2xl shadow-xl cursor-pointer flex flex-col items-center gap-2 select-none"
-      >
-        <ClipboardCheck size={16} className="text-amber-500 animate-pulse" />
-        <span className="text-[9px] font-black uppercase tracking-widest [writing-mode:vertical-lr] my-1 leading-none">
-          AFSPRAKEN
-        </span>
-      </div>
-
-      {/* Drawer content */}
-      <div className="w-[280px] bg-white border-l border-y border-slate-200/85 rounded-l-2xl shadow-2xl p-5 space-y-4 flex flex-col justify-between shrink-0 h-[380px] font-sans">
-        <div className="space-y-4">
-          <div className="space-y-1 text-left">
-            <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest leading-none block">
-              Vaste Tarieven
-            </span>
-            <h4 className="text-sm font-black text-slate-800 truncate" title={currentClient ? currentClient.name : "Geen / Standaard"}>
-              {currentClient ? currentClient.name : "Standaard / Geen"}
-            </h4>
-          </div>
-
-          <div className="border-t border-slate-100 my-2"></div>
-
-          {/* Agreements Items List */}
-          <div className="space-y-3.5 text-left">
-            {/* Row 1 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
-              <div className="min-w-0 pr-2">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Uitlezen</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Voor en Na OBD</span>
-              </div>
-              <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceUitlezen ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
-                {formatPrice(currentClient?.priceUitlezen)}
-              </span>
-            </div>
-
-            {/* Row 2 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
-              <div className="min-w-0 pr-2">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Uitlijnen</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Geometrie Service</span>
-              </div>
-              <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceUitlijnen ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
-                {formatPrice(currentClient?.priceUitlijnen)}
-              </span>
-            </div>
-
-            {/* Row 3 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
-              <div className="min-w-0 pr-2">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Koelvloeistof</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Vloeistofafspraak</span>
-              </div>
-              <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceKoelvloeistof ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
-                {formatPrice(currentClient?.priceKoelvloeistof)}
-              </span>
-            </div>
-
-            {/* Row 4 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
-              <div className="min-w-0 pr-2">
-                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Antiroest</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Conservering</span>
-              </div>
-              <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceAntiroest ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
-                {formatPrice(currentClient?.priceAntiroest)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Branding Footer */}
-        <div className="border-t border-slate-100 pt-2 flex items-center justify-between">
-          <span className="text-[8px] font-black uppercase tracking-wider text-slate-300">
-            Danny Radjkoemar
-          </span>
-          <span className="text-[8px] font-bold text-slate-400">
-            PartVerify Pro
-          </span>
-        </div>
-      </div>
     </motion.div>
   );
 }
