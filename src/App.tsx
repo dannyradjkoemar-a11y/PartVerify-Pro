@@ -42,7 +42,9 @@ import {
   GraduationCap,
   Check,
   ChevronDown,
-  Edit2
+  Edit2,
+  Upload,
+  Link
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -96,6 +98,63 @@ import firebaseConfig from "../firebase-applet-config.json";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Eenvoudige IndexedDB helper voor lokale PDF opslag per opdrachtgever
+const openPdfDatabase = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("PartVerifyPdfDB", 1);
+    request.onupgradeneeded = (e) => {
+      const db = (e.target as IDBOpenDBRequest).result;
+      if (!db.objectStoreNames.contains("pdfs")) {
+        db.createObjectStore("pdfs", { keyPath: "clientId" });
+      }
+    };
+    request.onsuccess = (e) => {
+      resolve((e.target as IDBOpenDBRequest).result);
+    };
+    request.onerror = (e) => {
+      reject((e.target as IDBOpenDBRequest).error);
+    };
+  });
+};
+
+const savePdfToLocal = async (clientId: string, fileName: string, base64Data: string): Promise<void> => {
+  const db = await openPdfDatabase();
+  return new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction("pdfs", "readwrite");
+    const store = transaction.objectStore("pdfs");
+    const request = store.put({ clientId, fileName, base64Data, updatedAt: Date.now() });
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const getPdfFromLocal = async (clientId: string): Promise<{ fileName: string, base64Data: string } | null> => {
+  try {
+    const db = await openPdfDatabase();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction("pdfs", "readonly");
+      const store = transaction.objectStore("pdfs");
+      const request = store.get(clientId);
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+  } catch (err) {
+    console.error("IndexedDB get error:", err);
+    return null;
+  }
+};
+
+const deletePdfFromLocal = async (clientId: string): Promise<void> => {
+  const db = await openPdfDatabase();
+  return new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction("pdfs", "readwrite");
+    const store = transaction.objectStore("pdfs");
+    const request = store.delete(clientId);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
 
 export default function App() {
   const [email, setEmail] = useState("");
@@ -2347,22 +2406,21 @@ export default function App() {
     const prUitlijnen = activeClient?.priceUitlijnen;
     const prKoelvloeistof = activeClient?.priceKoelvloeistof;
     const prAntiroest = activeClient?.priceAntiroest;
+    const prPortierfolie = activeClient?.pricePortierfolie;
+    const prDempingsmatten = activeClient?.priceDempingsmatten;
 
     let agreementsParts = [];
-    if (prUitlezen) agreementsParts.push(`Uitlezen: ${unitUitlezen === "Ae" ? `${prUitlezen} Ae` : `€${Number(prUitlezen).toFixed(2)}`}`);
-    else agreementsParts.push("Uitlezen: —");
-    
+    if (prUitlezen) agreementsParts.push(`OBD: ${unitUitlezen === "Ae" ? `${prUitlezen} Ae` : `€${Number(prUitlezen).toFixed(2)}`}`);
     if (prUitlijnen) agreementsParts.push(`Uitlijnen: €${Number(prUitlijnen).toFixed(2)}`);
-    else agreementsParts.push("Uitlijnen: —");
-
     if (prKoelvloeistof) agreementsParts.push(`Koelvloeistof: €${Number(prKoelvloeistof).toFixed(2)}`);
-    else agreementsParts.push("Koelvloeistof: —");
-
     if (prAntiroest) agreementsParts.push(`Antiroest: €${Number(prAntiroest).toFixed(2)}`);
-    else agreementsParts.push("Antiroest: —");
+    if (prPortierfolie) agreementsParts.push(`Portierfolie: €${Number(prPortierfolie).toFixed(2)}`);
+    if (prDempingsmatten) agreementsParts.push(`Dempingsmatten: €${Number(prDempingsmatten).toFixed(2)}`);
+    if (agreementsParts.length === 0) agreementsParts.push("Geen vaste prijsafspraken geregistreerd");
 
     doc.setFont("helvetica", "bold");
     doc.setTextColor(30, 41, 59); // slate-800
+    doc.setFontSize(6.8); // Slightly smaller font to fit all possible 6 items
     doc.text(agreementsParts.join("   |   "), 93, agreementsY + 7.2);
 
     // Checklist diagnostics panel
@@ -4801,6 +4859,10 @@ function AdminView({
   const [adminPriceUitlijnen, setAdminPriceUitlijnen] = useState("");
   const [adminPriceKoelvloeistof, setAdminPriceKoelvloeistof] = useState("");
   const [adminPriceAntiroest, setAdminPriceAntiroest] = useState("");
+  const [adminPricePortierfolie, setAdminPricePortierfolie] = useState("");
+  const [adminPriceDempingsmatten, setAdminPriceDempingsmatten] = useState("");
+  const [adminPriceListLink, setAdminPriceListLink] = useState("");
+  const [localPdfFile, setLocalPdfFile] = useState<{ fileName: string, base64Data: string } | null>(null);
 
   const loadData = async () => {
     const uDocs = await getDocs(collection(db, "users"));
@@ -4822,6 +4884,10 @@ function AdminView({
       const loadPrices = async () => {
         const pDocs = await getDocs(collection(db, "clients", selectedAdminClient, "prices"));
         setClientPrices(pDocs.docs.map(d => ({ id: d.id, ...d.data() })));
+        
+        // Load local PDF from IndexedDB
+        const localPdf = await getPdfFromLocal(selectedAdminClient);
+        setLocalPdfFile(localPdf);
       };
       loadPrices();
 
@@ -4832,6 +4898,9 @@ function AdminView({
         setAdminPriceUitlijnen(currentClient.priceUitlijnen !== undefined ? String(currentClient.priceUitlijnen) : "");
         setAdminPriceKoelvloeistof(currentClient.priceKoelvloeistof !== undefined ? String(currentClient.priceKoelvloeistof) : "");
         setAdminPriceAntiroest(currentClient.priceAntiroest !== undefined ? String(currentClient.priceAntiroest) : "");
+        setAdminPricePortierfolie(currentClient.pricePortierfolie !== undefined ? String(currentClient.pricePortierfolie) : "");
+        setAdminPriceDempingsmatten(currentClient.priceDempingsmatten !== undefined ? String(currentClient.priceDempingsmatten) : "");
+        setAdminPriceListLink(currentClient.priceListLink !== undefined ? currentClient.priceListLink : "");
       }
     }
   }, [selectedAdminClient, clients]);
@@ -4846,6 +4915,9 @@ function AdminView({
         priceUitlijnen: parseFloat(adminPriceUitlijnen.replace(',', '.')) || 0,
         priceKoelvloeistof: parseFloat(adminPriceKoelvloeistof.replace(',', '.')) || 0,
         priceAntiroest: parseFloat(adminPriceAntiroest.replace(',', '.')) || 0,
+        pricePortierfolie: parseFloat(adminPricePortierfolie.replace(',', '.')) || 0,
+        priceDempingsmatten: parseFloat(adminPriceDempingsmatten.replace(',', '.')) || 0,
+        priceListLink: adminPriceListLink.trim(),
       };
       await updateDoc(clientRef, updatedData);
       
@@ -5156,11 +5228,137 @@ function AdminView({
                         />
                       </div>
                     </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Portierfolie</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
+                        <input 
+                          type="text" 
+                          value={adminPricePortierfolie}
+                          onChange={(e) => setAdminPricePortierfolie(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Dempingsmatten</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-2 text-slate-400 text-sm font-bold">€</span>
+                        <input 
+                          type="text" 
+                          value={adminPriceDempingsmatten}
+                          onChange={(e) => setAdminPriceDempingsmatten(e.target.value)}
+                          placeholder="0.00"
+                          className="w-full pl-7 p-2 text-sm border border-slate-200 rounded-lg bg-white font-semibold focus:ring-1 focus:ring-amber-500 outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-end pt-1">
+
+                  {/* PDF Upload / Links Sectie */}
+                  <div className="border-t border-slate-200 pt-5 flex flex-col md:flex-row gap-5 items-start">
+                    {/* Link */}
+                    <div className="w-full md:w-1/2">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1.5">
+                        <Link size={12} className="text-amber-600" />
+                        Online Prijslijst URL (bv. OneDrive / Dropbox link)
+                      </label>
+                      <input 
+                        type="url" 
+                        value={adminPriceListLink}
+                        onChange={(e) => setAdminPriceListLink(e.target.value)}
+                        placeholder="https://onedrive.live.com/..."
+                        className="w-full p-2.5 text-xs border border-slate-200 rounded-xl focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white font-medium"
+                      />
+                    </div>
+
+                    {/* PDF upload element */}
+                    <div className="w-full md:w-1/2 flex flex-col">
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 flex items-center gap-1.5">
+                        <FileText size={12} className="text-amber-600" />
+                        Upload Prijslijst PDF (Exclusief lokaal beveiligd)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        {localPdfFile ? (
+                          <div className="flex-1 flex items-center justify-between p-2 pl-3 bg-white border border-slate-200 rounded-xl text-xs h-[38px]">
+                            <span className="font-bold text-slate-700 truncate max-w-[150px] md:max-w-[200px]" title={localPdfFile.fileName}>
+                              📄 {localPdfFile.fileName}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button 
+                                onClick={() => {
+                                  // Open PDF in new tab
+                                  const newTab = window.open();
+                                  if (newTab) {
+                                    newTab.document.write(`<iframe src="${localPdfFile.base64Data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                                  } else {
+                                    // Fallback: download instead
+                                    const link = document.createElement("a");
+                                    link.href = localPdfFile.base64Data;
+                                    link.download = localPdfFile.fileName;
+                                    link.click();
+                                  }
+                                }}
+                                className="p-1 px-1.5 text-slate-500 hover:text-slate-850 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                                title="Bekijk PDF"
+                              >
+                                <Eye size={12} />
+                              </button>
+                              <button 
+                                onClick={async () => {
+                                  if (confirm("Weet u zeker dat u de geüploade PDF wilt wissen?")) {
+                                    await deletePdfFromLocal(selectedAdminClient);
+                                    setLocalPdfFile(null);
+                                    setLocalToast("Prijslijst PDF succesvol verwijderd!");
+                                    setTimeout(() => setLocalToast(null), 3050);
+                                  }
+                                }}
+                                className="p-1 px-1.5 text-rose-500 hover:text-rose-700 bg-slate-50 hover:bg-rose-100/50 border border-slate-200 rounded-lg transition-colors cursor-pointer"
+                                title="Verwijder PDF"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <label className="flex-1 flex items-center justify-center border border-dashed border-slate-300 rounded-xl p-2 hover:border-slate-400 cursor-pointer text-xs font-bold text-slate-500 bg-white h-[38px] hover:bg-slate-50/50 transition-colors">
+                            <Upload size={14} className="mr-1.5 text-slate-400" />
+                            <span>Selecteer PDF bestand</span>
+                            <input 
+                              type="file" 
+                              accept="application/pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                if (file.size > 8 * 1024 * 1024) {
+                                  alert("Het PDF bestand is te groot (maximaal 8MB).");
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onload = async (event) => {
+                                  const base64Data = event.target?.result as string;
+                                  if (base64Data) {
+                                    await savePdfToLocal(selectedAdminClient, file.name, base64Data);
+                                    setLocalPdfFile({ fileName: file.name, base64Data });
+                                    setLocalToast("Prijslijst PDF succesvol geüpload en lokaal beveiligd!");
+                                    setTimeout(() => setLocalToast(null), 3050);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }}
+                              className="hidden"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-3 border-t border-slate-100">
                     <button 
                       onClick={saveAgreements}
-                      className="px-5 py-2 bg-slate-900 text-white font-bold rounded-lg text-xs hover:bg-slate-800 transition-all shadow-sm active:scale-95"
+                      className="px-5 py-2.5 bg-slate-900 text-white font-bold rounded-xl text-xs hover:bg-slate-800 transition-all shadow-md active:scale-95"
                     >
                       Afspraken Opslaan
                     </button>
@@ -6025,7 +6223,21 @@ function AdminView({
 
 function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: string, clients: any[] }) {
   const [isHovered, setIsHovered] = useState(false);
+  const [dashboardPdf, setDashboardPdf] = useState<{ fileName: string, base64Data: string } | null>(null);
   const currentClient = clients.find(c => c.id === selectedClientId);
+
+  useEffect(() => {
+    if (selectedClientId) {
+      getPdfFromLocal(selectedClientId).then(pdf => {
+        setDashboardPdf(pdf);
+      }).catch(err => {
+        console.error("Fout bij laden dashboard PDF:", err);
+        setDashboardPdf(null);
+      });
+    } else {
+      setDashboardPdf(null);
+    }
+  }, [selectedClientId]);
 
   const formatPrice = (val: any) => {
     if (val === undefined || val === null || val === "" || isNaN(Number(val)) || Number(val) === 0) {
@@ -6065,7 +6277,7 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
       </div>
 
       {/* Drawer content */}
-      <div className="w-[280px] bg-white border-l border-y border-slate-200/85 rounded-l-2xl shadow-2xl p-5 space-y-4 flex flex-col justify-between shrink-0 h-[380px] font-sans">
+      <div className="w-[280px] bg-white border-l border-y border-slate-200/85 rounded-l-2xl shadow-2xl p-5 space-y-4 flex flex-col justify-between shrink-0 h-auto min-h-[480px] font-sans">
         <div className="space-y-4">
           <div className="space-y-1 text-left">
             <span className="text-[10px] font-black uppercase text-amber-600 tracking-widest leading-none block">
@@ -6079,12 +6291,12 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
           <div className="border-t border-slate-100 my-2"></div>
 
           {/* Agreements Items List */}
-          <div className="space-y-3.5 text-left">
+          <div className="space-y-2 text-left">
             {/* Row 1 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
+            <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
               <div className="min-w-0 pr-2">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Uitlezen</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Voor en Na OBD</span>
+                <span className="text-[8px] text-slate-400 font-medium block leading-normal font-sans">Voor en Na OBD</span>
               </div>
               <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceUitlezen ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
                 {formatPriceUitlezen(currentClient?.priceUitlezen, currentClient?.unitUitlezen)}
@@ -6092,10 +6304,10 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
             </div>
 
             {/* Row 2 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
+            <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
               <div className="min-w-0 pr-2">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Uitlijnen</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Geometrie Service</span>
+                <span className="text-[8px] text-slate-400 font-medium block leading-normal font-sans">Geometrie Service</span>
               </div>
               <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceUitlijnen ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
                 {formatPrice(currentClient?.priceUitlijnen)}
@@ -6103,10 +6315,10 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
             </div>
 
             {/* Row 3 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
+            <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
               <div className="min-w-0 pr-2">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Koelvloeistof</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Vloeistofafspraak</span>
+                <span className="text-[8px] text-slate-400 font-medium block leading-normal font-sans">Vloeistofafspraak</span>
               </div>
               <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceKoelvloeistof ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
                 {formatPrice(currentClient?.priceKoelvloeistof)}
@@ -6114,16 +6326,79 @@ function HoverAgreementsTab({ selectedClientId, clients }: { selectedClientId: s
             </div>
 
             {/* Row 4 */}
-            <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
+            <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
               <div className="min-w-0 pr-2">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Antiroest</span>
-                <span className="text-[8px] text-slate-400 font-medium block leading-normal">Conservering</span>
+                <span className="text-[8px] text-slate-400 font-medium block leading-normal font-sans">Conservering</span>
               </div>
               <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceAntiroest ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
                 {formatPrice(currentClient?.priceAntiroest)}
               </span>
             </div>
+
+            {/* Row 5: Portierfolie */}
+            <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
+              <div className="min-w-0 pr-2">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Portierfolie</span>
+                <span className="text-[8px] text-slate-400 font-medium block leading-normal font-sans">Geventileerde folie</span>
+              </div>
+              <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.pricePortierfolie ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
+                {formatPrice(currentClient?.pricePortierfolie)}
+              </span>
+            </div>
+
+            {/* Row 6: Dempingsmatten */}
+            <div className="flex items-center justify-between p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100/60 border border-slate-100 transition-all">
+              <div className="min-w-0 pr-2">
+                <span className="text-[10px] uppercase font-bold text-slate-500 block tracking-tight leading-none">Dempingsmatten</span>
+                <span className="text-[8px] text-slate-400 font-medium block leading-normal font-sans">Geluidsisolatie</span>
+              </div>
+              <span className={`text-xs font-black font-mono shrink-0 ${currentClient?.priceDempingsmatten ? 'text-emerald-600' : 'text-slate-450 italic font-medium'}`}>
+                {formatPrice(currentClient?.priceDempingsmatten)}
+              </span>
+            </div>
           </div>
+
+          {/* PDF & URL Links if present (Subtly grouped under "Documenten" without cluttering) */}
+          {(dashboardPdf || currentClient?.priceListLink) && (
+            <div className="mt-4 pt-3 border-t border-slate-100 space-y-1.5">
+              <span className="block text-[8px] font-black uppercase text-slate-400 tracking-wider text-left mb-1">
+                Documenten & Tarieven (PDF)
+              </span>
+              
+              {dashboardPdf && (
+                <button
+                  onClick={() => {
+                    const newTab = window.open();
+                    if (newTab) {
+                      newTab.document.write(`<iframe src="${dashboardPdf.base64Data}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                    } else {
+                      const link = document.createElement("a");
+                      link.href = dashboardPdf.base64Data;
+                      link.download = dashboardPdf.fileName;
+                      link.click();
+                    }
+                  }}
+                  className="w-full py-2 px-3 bg-amber-500 hover:bg-amber-600 rounded-xl text-[10px] font-bold text-white flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-amber-600/30 shadow-xs"
+                >
+                  <FileText size={12} />
+                  <span>Open Prijslijst PDF</span>
+                </button>
+              )}
+
+              {currentClient?.priceListLink && (
+                <a
+                  href={currentClient.priceListLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-[10px] font-bold text-slate-700 flex items-center justify-center gap-1.5 transition-colors border border-slate-200 text-center"
+                >
+                  <Link size={12} className="text-slate-500" />
+                  <span>Externe Prijslijst</span>
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Branding Footer */}
