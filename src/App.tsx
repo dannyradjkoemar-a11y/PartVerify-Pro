@@ -137,6 +137,7 @@ export default function App() {
   const [crtEffect, setCrtEffect] = useState<boolean>(() => localStorage.getItem("partverify_crt_effect") === "true");
   const [audioFeedback, setAudioFeedback] = useState<boolean>(() => localStorage.getItem("partverify_audio_feedback") === "true");
   const [glowText, setGlowText] = useState<boolean>(() => localStorage.getItem("partverify_glow_text") === "true");
+  const [fontSizeScale, setFontSizeScale] = useState<number>(() => parseFloat(localStorage.getItem("partverify_font_size_scale") || "1.0"));
 
   const PRESET_THEMES = useMemo(() => [
     {
@@ -742,7 +743,7 @@ export default function App() {
         --selected-bg-page: ${bgPage};
         --selected-card-bg: ${cardBg};
         --selected-text: ${textColor};
-        --font-scale: ${textScale};
+        --font-scale: ${parseFloat(textScale) * fontSizeScale};
         --pad-scale: ${paddingScale};
         --radius: ${radius};
       }
@@ -894,7 +895,7 @@ export default function App() {
         }
       ` : ''}
     `;
-  }, [layoutShape, layoutFont, layoutSize, layoutStyle, cardShadow, bgPattern, buttonStyle, inputFlatStyle, headerStyle, crtEffect, glowText, PRESET_THEMES]);
+  }, [layoutShape, layoutFont, layoutSize, layoutStyle, cardShadow, bgPattern, buttonStyle, inputFlatStyle, headerStyle, crtEffect, glowText, fontSizeScale, PRESET_THEMES]);
   const [clientPrices, setClientPrices] = useState<any[]>([]);
 
   const [tfaSecret, setTfaSecret] = useState<string | null>(null);
@@ -4107,6 +4108,8 @@ export default function App() {
             setAudioFeedback={setAudioFeedback}
             glowText={glowText}
             setGlowText={setGlowText}
+            fontSizeScale={fontSizeScale}
+            setFontSizeScale={setFontSizeScale}
             PRESET_THEMES={PRESET_THEMES}
           />
         )}
@@ -4735,6 +4738,8 @@ function AdminView({
   setAudioFeedback,
   glowText,
   setGlowText,
+  fontSizeScale,
+  setFontSizeScale,
   PRESET_THEMES
 }: any) {
   const [users, setUsers] = useState<any[]>([]);
@@ -5440,6 +5445,61 @@ function AdminView({
                         }`}
                       >
                         {sz.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">3b. Fijnafstelling Lettergrootte</h4>
+                    <span className="text-xs bg-amber-50 text-amber-700 font-extrabold px-2 py-0.5 rounded-lg border border-amber-200 animate-pulse">
+                      {Math.round(fontSizeScale * 100)}%
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium font-bold">Versleep de schuifregelaar of kies onderstaande presets voor de perfect leesbare typografie.</p>
+                  
+                  <div className="space-y-2">
+                    <input 
+                      type="range"
+                      min="0.70"
+                      max="1.60"
+                      step="0.05"
+                      value={fontSizeScale}
+                      onChange={(e) => {
+                        const val = parseFloat(e.target.value);
+                        setFontSizeScale(val);
+                        localStorage.setItem("partverify_font_size_scale", val.toString());
+                      }}
+                      className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 font-semibold px-0.5">
+                      <span>70% (Zeer klein)</span>
+                      <span>100% (Normaal)</span>
+                      <span>160% (XL)</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 pt-1">
+                    {[
+                      { scale: 0.85, name: "Klein (85%)" },
+                      { scale: 1.00, name: "Standaard (100%)" },
+                      { scale: 1.15, name: "Groot (115%)" },
+                      { scale: 1.35, name: "Senioren / XL (135%)" }
+                    ].map((p) => (
+                      <button
+                        key={p.scale}
+                        onClick={() => {
+                          setFontSizeScale(p.scale);
+                          localStorage.setItem("partverify_font_size_scale", p.scale.toString());
+                        }}
+                        className={`py-2 px-1 text-[10px] font-black border rounded-xl transition-all ${
+                          Math.abs(fontSizeScale - p.scale) < 0.01
+                            ? "bg-amber-600 border-amber-600 text-white shadow-sm"
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {p.name}
                       </button>
                     ))}
                   </div>
