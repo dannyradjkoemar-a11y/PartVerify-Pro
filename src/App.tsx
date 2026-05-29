@@ -122,6 +122,779 @@ export default function App() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+
+  // Premium Design Studio Styles state variables
+  const [layoutShape, setLayoutShape] = useState<string>(() => localStorage.getItem("partverify_layout_shape") || "smooth");
+  const [layoutFont, setLayoutFont] = useState<string>(() => localStorage.getItem("partverify_layout_font") || "Inter");
+  const [layoutSize, setLayoutSize] = useState<string>(() => localStorage.getItem("partverify_layout_size") || "standard");
+  const [layoutStyle, setLayoutStyle] = useState<string>(() => localStorage.getItem("partverify_layout_style") || "classic-blue");
+  const [cardShadow, setCardShadow] = useState<string>(() => localStorage.getItem("partverify_card_shadow") || "soft");
+  const [bgPattern, setBgPattern] = useState<string>(() => localStorage.getItem("partverify_bg_pattern") || "solid");
+  const [buttonStyle, setButtonStyle] = useState<string>(() => localStorage.getItem("partverify_button_style") || "classic");
+  const [inputFlatStyle, setInputFlatStyle] = useState<string>(() => localStorage.getItem("partverify_input_flat") || "rounded");
+  const [headerStyle, setHeaderStyle] = useState<string>(() => localStorage.getItem("partverify_header_style") || "standard");
+  const [pdfTheme, setPdfTheme] = useState<string>(() => localStorage.getItem("partverify_pdf_theme") || "theme-matched");
+  const [crtEffect, setCrtEffect] = useState<boolean>(() => localStorage.getItem("partverify_crt_effect") === "true");
+  const [audioFeedback, setAudioFeedback] = useState<boolean>(() => localStorage.getItem("partverify_audio_feedback") === "true");
+  const [glowText, setGlowText] = useState<boolean>(() => localStorage.getItem("partverify_glow_text") === "true");
+
+  const PRESET_THEMES = useMemo(() => [
+    {
+      id: "classic-blue",
+      name: "Classic Corporate Blue",
+      desc: "Het vertrouwde originele PartVerify Pro blauw",
+      primary: "#2563eb",
+      primaryHover: "#1d4ed8",
+      bgPage: "#f8fafc",
+      cardBg: "#ffffff",
+      textColor: "#0f172a",
+      font: "Inter",
+      shape: "smooth",
+      size: "standard"
+    },
+    {
+      id: "royal-navy",
+      name: "Royal Velvet Navy",
+      desc: "Diep koninklijk blauw met rijke donkere details",
+      primary: "#1e3a8a",
+      primaryHover: "#172554",
+      bgPage: "#f1f5f9",
+      cardBg: "#ffffff",
+      textColor: "#0f172a",
+      font: "Outfit",
+      shape: "smooth",
+      size: "comfortable"
+    },
+    {
+      id: "cyber-emerald",
+      name: "Cyberpunk Emerald",
+      desc: "Technisch diepgroen met futuristische accenten",
+      primary: "#10b981",
+      primaryHover: "#059669",
+      bgPage: "#0f172a",
+      cardBg: "#1e293b",
+      textColor: "#f8fafc",
+      font: "JetBrains Mono",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "amethyst-jewel",
+      name: "Royal Amethyst Purple",
+      desc: "Paars voor een vorstelijke uitstraling",
+      primary: "#7c3aed",
+      primaryHover: "#6d28d9",
+      bgPage: "#faf5ff",
+      cardBg: "#ffffff",
+      textColor: "#1e1b4b",
+      font: "Space Grotesk",
+      shape: "pill",
+      size: "standard"
+    },
+    {
+      id: "modern-amber",
+      name: "Titanium Amber",
+      desc: "Verfijnd antraciet met vurig oker/amber gloed",
+      primary: "#f59e0b",
+      primaryHover: "#d97706",
+      bgPage: "#18181b",
+      cardBg: "#27272a",
+      textColor: "#f4f4f5",
+      font: "Plus Jakarta Sans",
+      shape: "smooth",
+      size: "standard"
+    },
+    {
+      id: "crimson-exec",
+      name: "Crimson Executive",
+      desc: "Chique bordeauxrood met gestroomlijnde details",
+      primary: "#be123c",
+      primaryHover: "#9f1239",
+      bgPage: "#fff1f2",
+      cardBg: "#ffffff",
+      textColor: "#4c0519",
+      font: "Playfair Display",
+      shape: "slightly-rounded",
+      size: "comfortable"
+    },
+    {
+      id: "forest-moss",
+      name: "Eucalyptus Forest",
+      desc: "Kalmerende bosrijke tinten en zachte contrasten",
+      primary: "#047857",
+      primaryHover: "#065f46",
+      bgPage: "#f0fdf4",
+      cardBg: "#ffffff",
+      textColor: "#052e16",
+      font: "DM Sans",
+      shape: "smooth",
+      size: "comfortable"
+    },
+    {
+      id: "sunset-warmth",
+      name: "Peach Sunset",
+      desc: "Warme terracotta en zacht perzik-oranje tinten",
+      primary: "#f97316",
+      primaryHover: "#ea580c",
+      bgPage: "#fff7ed",
+      cardBg: "#ffffff",
+      textColor: "#431407",
+      font: "Lexend",
+      shape: "pill",
+      size: "standard"
+    },
+    {
+      id: "ocean-breeze",
+      name: "Vibrant Cyan Ocean",
+      desc: "Kristalhelder aquablauw en frisse oceaanlucht",
+      primary: "#06b6d4",
+      primaryHover: "#0891b2",
+      bgPage: "#ecfeff",
+      cardBg: "#ffffff",
+      textColor: "#083344",
+      font: "Sora",
+      shape: "smooth",
+      size: "standard"
+    },
+    {
+      id: "midnight-stealth",
+      name: "Midnight Carbon",
+      desc: "Matzwart met minimalistische neon details",
+      primary: "#3b82f6",
+      primaryHover: "#2563eb",
+      bgPage: "#090d16",
+      cardBg: "#111827",
+      textColor: "#f3f4f6",
+      font: "Space Grotesk",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "swiss-minimal",
+      name: "Swiss Minimalist",
+      desc: "Strikte typografie, pure grijstinten en wit",
+      primary: "#000000",
+      primaryHover: "#171717",
+      bgPage: "#fafafa",
+      cardBg: "#ffffff",
+      textColor: "#171717",
+      font: "Inter",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "gold-executive",
+      name: "Chrysler Gold & Black",
+      desc: "Exclusief champagne goud en chique antraciet",
+      primary: "#d4af37",
+      primaryHover: "#aa8c2c",
+      bgPage: "#0a0a0a",
+      cardBg: "#161616",
+      textColor: "#eae9e0",
+      font: "Clash Display",
+      shape: "slightly-rounded",
+      size: "standard"
+    },
+    {
+      id: "retro-phosphor",
+      name: "Vintronic Green-Screen",
+      desc: "Nostalgisch monotoom groen van oude beeldbuizen",
+      primary: "#22c55e",
+      primaryHover: "#16a34a",
+      bgPage: "#050c05",
+      cardBg: "#091509",
+      textColor: "#4ade80",
+      font: "Fira Code",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "coffee-cream",
+      name: "Roast Coffee & Milk",
+      desc: "Gezellige hazelnoot, mokka en romig wit",
+      primary: "#78350f",
+      primaryHover: "#451a03",
+      bgPage: "#fdf8f5",
+      cardBg: "#ffffff",
+      textColor: "#451a03",
+      font: "Quicksand",
+      shape: "smooth",
+      size: "standard"
+    },
+    {
+      id: "lavender-romance",
+      name: "Lavender Mist",
+      desc: "Zachte dromerige lavendel tinten en parelwit",
+      primary: "#8b5cf6",
+      primaryHover: "#7c3aed",
+      bgPage: "#f5f3ff",
+      cardBg: "#ffffff",
+      textColor: "#311042",
+      font: "Nunito",
+      shape: "pill",
+      size: "comfortable"
+    },
+    {
+      id: "baby-pastels",
+      name: "Sweet Sherbet Pastels",
+      desc: "Zachte snoepkleurtjes, vriendelijk en speels",
+      primary: "#ec4899",
+      primaryHover: "#db2777",
+      bgPage: "#fff5f7",
+      cardBg: "#ffffff",
+      textColor: "#4d0016",
+      font: "Quicksand",
+      shape: "pill",
+      size: "standard"
+    },
+    {
+      id: "warm-terracotta",
+      name: "Sahara Clay",
+      desc: "Elegante terracotta, okergoud en beige zand",
+      primary: "#c2410c",
+      primaryHover: "#9a3412",
+      bgPage: "#faf6f0",
+      cardBg: "#ffffff",
+      textColor: "#431407",
+      font: "Lexend",
+      shape: "slightly-rounded",
+      size: "comfortable"
+    },
+    {
+      id: "nordic-winter",
+      name: "Nordic Alpine Frost",
+      desc: "Gletsjer mint, koud ijsblauw en zilvergrijs",
+      primary: "#0ea5e9",
+      primaryHover: "#0284c7",
+      bgPage: "#f0f9ff",
+      cardBg: "#ffffff",
+      textColor: "#0c4a6e",
+      font: "Plus Jakarta Sans",
+      shape: "smooth",
+      size: "comfortable"
+    },
+    {
+      id: "imperial-purple",
+      name: "Byzantine Dynasty",
+      desc: "Diep koninklijk bordeaux paars en goud details",
+      primary: "#581c87",
+      primaryHover: "#3b0764",
+      bgPage: "#faf5ff",
+      cardBg: "#ffffff",
+      textColor: "#2e0854",
+      font: "Playfair Display",
+      shape: "slightly-rounded",
+      size: "standard"
+    },
+    {
+      id: "cyberpunk-carbon",
+      name: "Carbon Toxic Yellow",
+      desc: "Elektrisch giftig geel op zwaar industrieel antraciet",
+      primary: "#facc15",
+      primaryHover: "#eab308",
+      bgPage: "#121319",
+      cardBg: "#171923",
+      textColor: "#f7f9fa",
+      font: "Sora",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "terminal-nerd",
+      name: "1337 Green Hacker Terminal 🖥️",
+      desc: "Diep gitzwart met felle neon-groene phosphor letters, perfect voor echte nerds",
+      primary: "#00ff66",
+      primaryHover: "#00cc52",
+      bgPage: "#020402",
+      cardBg: "#050a05",
+      textColor: "#3bf577",
+      font: "JetBrains Mono",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "dracula-dark",
+      name: "Dracula Developer Core 🧛",
+      desc: "De legendarische donkere modus favoriet van developers wereldwijd",
+      primary: "#ff79c6",
+      primaryHover: "#bd93f9",
+      bgPage: "#282a36",
+      cardBg: "#20222b",
+      textColor: "#f8f8f2",
+      font: "JetBrains Mono",
+      shape: "slightly-rounded",
+      size: "standard"
+    },
+    {
+      id: "cyber-neon-sunset",
+      name: "Synthwave Sunset Boulevard 🌅",
+      desc: "Elektriserend hot-pink, neon violet en gloeiende oranje contrasten",
+      primary: "#ff007f",
+      primaryHover: "#d9006c",
+      bgPage: "#120822",
+      cardBg: "#1f0f3d",
+      textColor: "#f3e8ff",
+      font: "Sora",
+      shape: "smooth",
+      size: "comfortable"
+    },
+    {
+      id: "hotdog-stand",
+      name: "1990 Hot Dog Stand 🌭",
+      desc: "Schreeuwende hardcore rood/geel retro nostalgie (waarschuwing: oogverblindend!)",
+      primary: "#ff0000",
+      primaryHover: "#cc0000",
+      bgPage: "#ffff00",
+      cardBg: "#ffffff",
+      textColor: "#ff0000",
+      font: "Space Grotesk",
+      shape: "sharp",
+      size: "standard"
+    },
+    {
+      id: "msdos-prompt",
+      name: "MS-DOS Command Prompt 💾",
+      desc: "Monochroom amber-oranje letters op absolute commandline-duisternis",
+      primary: "#ffb000",
+      primaryHover: "#cbd5e1",
+      bgPage: "#0a0a0a",
+      cardBg: "#121212",
+      textColor: "#ffb000",
+      font: "JetBrains Mono",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "commodore-64",
+      name: "Commodore 64 Classic 🕹️",
+      desc: "Nostalgisch blauw-op-blauw met retro-computerkantoor uitstraling",
+      primary: "#3a86ff",
+      primaryHover: "#2a6fdf",
+      bgPage: "#101030",
+      cardBg: "#1a1a50",
+      textColor: "#83c5be",
+      font: "JetBrains Mono",
+      shape: "sharp",
+      size: "standard"
+    },
+    {
+      id: "gameboy-classic",
+      name: "GameBoy Pocket 1989 👾",
+      desc: "Compleet monochroom retro LCD scherm in groenachtige tinten",
+      primary: "#306230",
+      primaryHover: "#0f380f",
+      bgPage: "#9bbc0f",
+      cardBg: "#8bac0f",
+      textColor: "#0f380f",
+      font: "JetBrains Mono",
+      shape: "sharp",
+      size: "compact"
+    },
+    {
+      id: "monokai-pro",
+      name: "Professional Monokai Soda 🎨",
+      desc: "Zacht okergeel, neon roze en turkooise accenten op warm antraciet",
+      primary: "#f1c40f",
+      primaryHover: "#f39c12",
+      bgPage: "#272822",
+      cardBg: "#1e1f1c",
+      textColor: "#f8f8f2",
+      font: "JetBrains Mono",
+      shape: "smooth",
+      size: "standard"
+    },
+    {
+      id: "steampunk-brass",
+      name: "Victoriana Steampunk Brass ⚙️",
+      desc: "Warm geöxideerd messingsgoud, ouderwets koper en perkament papier",
+      primary: "#b45309",
+      primaryHover: "#92400e",
+      bgPage: "#fbf2e9",
+      cardBg: "#e7d4be",
+      textColor: "#451a03",
+      font: "Georgia",
+      shape: "slightly-rounded",
+      size: "comfortable"
+    },
+    {
+      id: "macos-1984",
+      name: "System 1.0 Cupertino 1984 🍏",
+      desc: "Vlakke retro grijstinten, dambordvullingen, vintage Macintosh gevoel",
+      primary: "#1c1c1c",
+      primaryHover: "#000000",
+      bgPage: "#f4f4eb",
+      cardBg: "#ffffff",
+      textColor: "#1c1c1c",
+      font: "Inter",
+      shape: "sharp",
+      size: "compact"
+    }
+  ], []);
+
+  const dynamicCss = useMemo(() => {
+    const selectedTheme = PRESET_THEMES.find(t => t.id === layoutStyle) || PRESET_THEMES[0];
+    
+    let radius = "16px";
+    if (layoutShape === "sharp") radius = "0px";
+    else if (layoutShape === "slightly-rounded") radius = "6px";
+    else if (layoutShape === "smooth") radius = "16px";
+    else if (layoutShape === "pill") radius = "28px";
+    
+    let textScale = "1";
+    let paddingScale = "1";
+    if (layoutSize === "compact") {
+      textScale = "0.9";
+      paddingScale = "0.8";
+    } else if (layoutSize === "comfortable") {
+      textScale = "1.08";
+      paddingScale = "1.12";
+    } else if (layoutSize === "prominent") {
+      textScale = "1.18";
+      paddingScale = "1.25";
+    }
+
+    const { primary, primaryHover, bgPage, cardBg, textColor } = selectedTheme;
+    const isDark = bgPage === "#0f172a" || bgPage === "#18181b" || bgPage === "#090d16" || bgPage === "#0a0a0a" || bgPage === "#050c05" || bgPage === "#121319" || bgPage === "#171923";
+
+    let shadowCss = "";
+    if (cardShadow === "flat") {
+      shadowCss = `
+        .shadow-sm, .shadow-xl, .shadow-2xl, .shadow-lg, .shadow-md, .shadow-inner, .shadow-amber-100 {
+          box-shadow: none !important;
+          border: 1px solid rgba(148, 163, 184, 0.2) !important;
+        }
+      `;
+    } else if (cardShadow === "soft") {
+      shadowCss = `
+        .shadow-sm, .shadow-xl, .shadow-2xl, .shadow-lg, .shadow-md {
+          box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05) !important;
+        }
+      `;
+    } else if (cardShadow === "deep") {
+      shadowCss = `
+        .shadow-sm, .shadow-xl, .shadow-2xl, .shadow-lg, .shadow-md {
+          box-shadow: 0 20px 40px -4px rgba(15, 23, 42, 0.12), 0 4px 14px -2px rgba(15, 23, 42, 0.04) !important;
+        }
+      `;
+    } else if (cardShadow === "glow") {
+      shadowCss = `
+        .shadow-sm, .shadow-xl, .shadow-2xl, .shadow-lg, .shadow-md {
+          box-shadow: 0 0 22px 2px ${primary}25 !important;
+          border: 1.5px solid ${primary}35 !important;
+        }
+      `;
+    }
+
+    let patternCss = "";
+    if (bgPattern === "dots") {
+      patternCss = `
+        .bg-slate-50, body {
+          background-color: ${bgPage} !important;
+          background-image: radial-gradient(#94a3b830 1.2px, transparent 1.2px) !important;
+          background-size: 18px 18px !important;
+        }
+      `;
+    } else if (bgPattern === "grid") {
+      patternCss = `
+        .bg-slate-50, body {
+          background-color: ${bgPage} !important;
+          background-image: linear-gradient(#94a3b80d 1px, transparent 1px), linear-gradient(90deg, #94a3b80d 1px, transparent 1px) !important;
+          background-size: 24px 24px !important;
+        }
+      `;
+    } else if (bgPattern === "abstract") {
+      patternCss = `
+        .bg-slate-50, body {
+          background-color: ${bgPage} !important;
+          background-image: radial-gradient(circle at 10% 20%, ${primary}0c 0%, transparent 40%), radial-gradient(circle at 90% 80%, ${primary}06 0%, transparent 50%) !important;
+          background-attachment: fixed !important;
+        }
+      `;
+    }
+
+    let btnCss = "";
+    if (buttonStyle === "soft") {
+      btnCss = `
+        .bg-blue-600, .bg-blue-550, .bg-blue-500, .bg-slate-900, .bg-emerald-600 {
+          background-color: ${primary}13 !important;
+          color: ${primary} !important;
+          border: 1.5px solid ${primary}30 !important;
+          text-shadow: none !important;
+        }
+        .bg-slate-900 {
+          background-color: rgba(71, 85, 105, 0.12) !important;
+          color: #475569 !important;
+          border: 1.5px solid rgba(71, 85, 105, 0.2) !important;
+        }
+        .bg-amber-600 {
+          background-color: rgba(217, 119, 6, 0.13) !important;
+          color: #d97706 !important;
+          border: 1.5px solid rgba(217, 119, 6, 0.25) !important;
+        }
+        .bg-amber-600:hover {
+          background-color: rgba(217, 119, 6, 0.22) !important;
+        }
+        .hover\\:bg-blue-700:hover, .hover\\:bg-blue-550:hover, .hover\\:bg-blue-500:hover, .hover\\:bg-blue-800:hover, .hover\\:bg-slate-800:hover, .hover\\:bg-emerald-700:hover {
+          background-color: ${primary}22 !important;
+          color: ${primary} !important;
+        }
+      `;
+    } else if (buttonStyle === "outlined") {
+      btnCss = `
+        .bg-blue-600, .bg-blue-550, .bg-blue-500, .bg-slate-900, .bg-emerald-600 {
+          background-color: transparent !important;
+          color: ${primary} !important;
+          border: 2px solid ${primary} !important;
+        }
+        .bg-slate-900 {
+          border: 2px solid #475569 !important;
+          color: #475569 !important;
+        }
+        .bg-amber-600 {
+          border: 2px solid #d97706 !important;
+          color: #d97706 !important;
+          background-color: transparent !important;
+        }
+        .bg-amber-600:hover {
+          background-color: rgba(217, 119, 6, 0.1) !important;
+        }
+        .hover\\:bg-blue-700:hover, .hover\\:bg-blue-550:hover, .hover\\:bg-blue-500:hover, .hover\\:bg-blue-800:hover, .hover\\:bg-slate-800:hover, .hover\\:bg-emerald-700:hover {
+          background-color: ${primary}10 !important;
+          color: ${primary} !important;
+        }
+      `;
+    } else if (buttonStyle === "vintage") {
+      btnCss = `
+        .bg-blue-600, .bg-blue-550, .bg-blue-500, .bg-slate-900, .bg-amber-600, .bg-emerald-600 {
+          background-color: ${primary} !important;
+          color: ${isDark ? '#000000' : '#ffffff'} !important;
+          border: 2px solid #0f172a !important;
+          box-shadow: 3px 3px 0px 0px #0f172a !important;
+          transform: translate(0px, 0px);
+        }
+        .bg-slate-900 {
+          background-color: #0f172a !important;
+          color: #ffffff !important;
+        }
+        .bg-amber-600 {
+          background-color: #d97706 !important;
+        }
+        .bg-blue-600:hover, .bg-blue-550:hover, .bg-blue-500:hover, .bg-slate-900:hover, .bg-amber-600:hover, .bg-emerald-600:hover {
+          transform: translate(-1.5px, -1.5px) !important;
+          box-shadow: 4.5px 4.5px 0px 0px #0f172a !important;
+        }
+      `;
+    }
+
+    let inputCss = "";
+    if (inputFlatStyle === "underline") {
+      inputCss = `
+        input, textarea, select {
+          border-top: none !important;
+          border-left: none !important;
+          border-right: none !important;
+          border-bottom: 2px solid #cbd5e1 !important;
+          border-radius: 0px !important;
+          padding-left: 6px !important;
+          background-color: transparent !important;
+        }
+        input:focus, textarea:focus, select:focus {
+          border-bottom-color: ${primary} !important;
+          box-shadow: none !important;
+        }
+      `;
+    } else if (inputFlatStyle === "bordered") {
+      inputCss = `
+        input, textarea, select {
+          border: 2px solid #0f172a !important;
+          border-radius: 4px !important;
+        }
+      `;
+    }
+
+    let headerCss = "";
+    if (headerStyle === "floating") {
+      headerCss = `
+        header {
+          margin: 18px auto !important;
+          max-width: 95% !important;
+          border-radius: 20px !important;
+          box-shadow: 0 10px 25px -4px rgba(0,0,0,0.06) !important;
+          border: 1px solid rgba(148,163,184,0.18) !important;
+        }
+      `;
+    } else if (headerStyle === "hybrid") {
+      headerCss = `
+        header {
+          background-color: rgba(255, 255, 255, 0.8) !important;
+          backdrop-filter: blur(14px) !important;
+          border-bottom: 1px solid rgba(148,163,184,0.15) !important;
+        }
+      `;
+    }
+
+    return `
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;900&family=Outfit:wght@400;500;700;900&family=Plus+Jakarta+Sans:wght@400;500;700;800&family=JetBrains+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lexend:wght@400;600;700;900&family=Sora:wght@400;600;800&family=Clash+Display:wght@400;600;700&family=Quicksand:wght@400;600;700&family=Inter:wght@400;500;700;900&family=Nunito:wght@400;600;800&display=swap');
+
+      :root {
+        --selected-primary: ${primary};
+        --selected-primary-hover: ${primaryHover};
+        --selected-bg-page: ${bgPage};
+        --selected-card-bg: ${cardBg};
+        --selected-text: ${textColor};
+        --font-scale: ${textScale};
+        --pad-scale: ${paddingScale};
+        --radius: ${radius};
+      }
+
+      body, button, input, textarea, select, h1, h2, h3, h4, h5, h6, div, span, p, label, table, th, td {
+        font-family: "${layoutFont}", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      }
+
+      .bg-slate-50 {
+        background-color: ${bgPage} !important;
+      }
+      .bg-white {
+        background-color: ${cardBg} !important;
+      }
+
+      ${isDark ? `
+        .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-950, .text-gray-900, .text-slate-600 {
+          color: #f1f5f9 !important;
+        }
+        .text-slate-500, .text-slate-400, .text-gray-500, .text-slate-450 {
+          color: #94a3b8 !important;
+        }
+        .border-slate-200, .border-slate-100, .border-gray-200 {
+          border-color: #334155 !important;
+        }
+        .bg-slate-100, .bg-slate-50, .bg-slate-50\\/50, .bg-gray-50 {
+          background-color: #1e293b !important;
+        }
+        .bg-slate-50\\/40, .bg-slate-50\\/10 {
+          background-color: rgba(30, 41, 59, 0.4) !important;
+        }
+        .bg-slate-200 {
+          background-color: #475569 !important;
+        }
+        input, textarea, select {
+          background-color: #1e293b !important;
+          color: #f8fafc !important;
+          border-color: #475569 !important;
+        }
+        header.bg-white {
+          background-color: #0f172a !important;
+          border-color: #334155 !important;
+        }
+        header .text-slate-500 {
+          color: #94a3b8 !important;
+        }
+        .shadow-sm {
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
+        }
+        .text-slate-705 {
+          color: #f1f5f9 !important;
+        }
+      ` : ''}
+
+      .bg-blue-600, .bg-blue-500 {
+        background-color: ${primary} !important;
+      }
+      .hover\\:bg-blue-700:hover, .hover\\:bg-blue-550:hover, .hover\\:bg-blue-500:hover, .hover\\:bg-blue-800:hover, .hover\\:bg-blue-900:hover, .hover\\:bg-slate-800:hover {
+        background-color: ${primaryHover} !important;
+      }
+      .text-blue-600, .text-blue-500 {
+        color: ${primary} !important;
+      }
+      .border-blue-600 {
+        border-color: ${primary} !important;
+      }
+      .border-blue-100 {
+        border-color: ${primary}15 !important;
+      }
+      .bg-blue-50 {
+        background-color: ${primary}10 !important;
+      }
+      .text-blue-800 {
+        color: ${primary} !important;
+      }
+
+      .rounded-3xl {
+        border-radius: var(--radius) !important;
+      }
+      .rounded-2xl {
+        border-radius: calc(var(--radius) * 0.75) !important;
+      }
+      .rounded-xl {
+        border-radius: calc(var(--radius) * 0.5) !important;
+      }
+      .rounded-lg {
+        border-radius: calc(var(--radius) * 0.35) !important;
+      }
+      .rounded-md {
+        border-radius: calc(var(--radius) * 0.25) !important;
+      }
+      .rounded-full {
+        border-radius: 9999px !important;
+      }
+
+      .text-xs { font-size: calc(12px * var(--font-scale)) !important; }
+      .text-sm { font-size: calc(14px * var(--font-scale)) !important; }
+      .text-base { font-size: calc(16px * var(--font-scale)) !important; }
+      .text-lg { font-size: calc(18px * var(--font-scale)) !important; }
+      .text-xl { font-size: calc(20px * var(--font-scale)) !important; }
+      .text-2xl { font-size: calc(24px * var(--font-scale)) !important; }
+      .text-3xl { font-size: calc(30px * var(--font-scale)) !important; }
+
+      .p-6 { padding: calc(24px * var(--pad-scale)) !important; }
+      .p-5 { padding: calc(20px * var(--pad-scale)) !important; }
+      .p-4 { padding: calc(16px * var(--pad-scale)) !important; }
+      .p-3 { padding: calc(12px * var(--pad-scale)) !important; }
+      .p-2 { padding: calc(8px * var(--pad-scale)) !important; }
+      .p-8 { padding: calc(32px * var(--pad-scale)) !important; }
+
+      .transition-all {
+        transition-duration: 200ms !important;
+      }
+
+      ${shadowCss}
+      ${patternCss}
+      ${btnCss}
+      ${inputCss}
+      ${headerCss}
+
+      ${crtEffect ? `
+        body::before {
+          content: " ";
+          display: block;
+          position: fixed;
+          top: 0; left: 0; bottom: 0; right: 0;
+          background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.05), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.05));
+          z-index: 999999;
+          background-size: 100% 3px, 3px 100%;
+          pointer-events: none;
+        }
+        body {
+          animation: crt-flicker 0.15s infinite;
+          text-shadow: 0 0 3px currentColor !important;
+        }
+        @keyframes crt-flicker {
+          0% { opacity: 0.99; }
+          50% { opacity: 0.995; }
+          100% { opacity: 0.99; }
+        }
+        .bg-slate-50 {
+          filter: contrast(1.08) brightness(1.02);
+        }
+      ` : ''}
+
+      ${glowText ? `
+        h1, h2, h3, h4, .font-black, .font-bold {
+          text-shadow: 0 0 10px ${primary}50, 0 0 20px ${primary}20 !important;
+        }
+      ` : ''}
+    `;
+  }, [layoutShape, layoutFont, layoutSize, layoutStyle, cardShadow, bgPattern, buttonStyle, inputFlatStyle, headerStyle, crtEffect, glowText, PRESET_THEMES]);
   const [clientPrices, setClientPrices] = useState<any[]>([]);
 
   const [tfaSecret, setTfaSecret] = useState<string | null>(null);
@@ -366,6 +1139,31 @@ export default function App() {
     setSavedDossiers(updated);
     setToastMsg("Dossier succesvol opgeslagen!");
     setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const playCyberBeep = (freq = 800, duration = 0.08, type = "sine") => {
+    if (!audioFeedback) return;
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = type as OscillatorType;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      
+      gain.gain.setValueAtTime(0.03, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (err) {
+      // Ignore audio block error
+    }
   };
 
   const loadDossier = (dossier: any) => {
@@ -1330,25 +2128,66 @@ export default function App() {
     const dateStr = now.toLocaleDateString('nl-NL');
     const timeStr = now.toLocaleTimeString('nl-NL');
 
-    // Draw Elegant Top Header Banner (Slate Steel Style)
-    doc.setFillColor(30, 41, 59); // Slate-800
-    doc.rect(0, 0, 210, 32, "F");
+    // Convert active theme hex color to rgb
+    const hexToRgb = (hexStr: string) => {
+      const match = hexStr.replace('#', '').match(/.{1,2}/g);
+      if (!match) return { r: 37, g: 99, b: 235 };
+      return {
+        r: parseInt(match[0], 16),
+        g: parseInt(match[1], 16),
+        b: parseInt(match[2], 16)
+      };
+    };
+    
+    const activeThemeConfig = PRESET_THEMES.find(t => t.id === layoutStyle) || PRESET_THEMES[0];
+    let brandRgb = hexToRgb(activeThemeConfig.primary);
+
+    if (pdfTheme === "classic-navy") {
+      brandRgb = { r: 15, g: 23, b: 42 };
+    } else if (pdfTheme === "monochrome") {
+      brandRgb = { r: 71, g: 85, b: 105 };
+    }
+
+    const isPrinterFriendly = pdfTheme === "printer-friendly";
+
+    // Draw Elegant Top Header Banner (Styled dynamically matching app layout!)
+    if (isPrinterFriendly) {
+      doc.setFillColor(250, 250, 250);
+      doc.rect(0, 0, 210, 32, "F");
+      doc.setDrawColor(226, 232, 240);
+      doc.line(0, 32, 210, 32);
+    } else {
+      doc.setFillColor(brandRgb.r, brandRgb.g, brandRgb.b);
+      doc.rect(0, 0, 210, 32, "F");
+    }
 
     // Corporate Title & Subtitle inside details
     doc.setFont("helvetica", "bold");
     doc.setFontSize(20);
-    doc.setTextColor(255, 255, 255); // White text
+    if (isPrinterFriendly) {
+      doc.setTextColor(15, 23, 42);
+    } else {
+      doc.setTextColor(255, 255, 255);
+    }
     doc.text("PartVerify Pro", 14, 18);
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    doc.setTextColor(203, 213, 225); // Slate-300
+    if (isPrinterFriendly) {
+      doc.setTextColor(71, 85, 105);
+    } else {
+      doc.setTextColor(203, 213, 225);
+    }
     doc.text("Eindcalculatie & Inkoopfactuur Verificatieverslag", 14, 25);
 
     // Right details inside banner
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8.5);
-    doc.setTextColor(251, 191, 36); // Amber Gold
+    if (isPrinterFriendly) {
+      doc.setTextColor(217, 119, 6);
+    } else {
+      doc.setTextColor(251, 191, 36);
+    }
     doc.text("Developed by Danny Radjkoemar", 130, 14);
 
     doc.setFont("helvetica", "normal");
@@ -1434,9 +2273,9 @@ export default function App() {
 
     let rightY = boxY + 13;
     
-    // Total Verified Amount (Blue highlights)
+    // Total Verified Amount (Theme highlights)
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(37, 99, 235); // Blue-600
+    doc.setTextColor(brandRgb.r, brandRgb.g, brandRgb.b);
     doc.text("Geverifieerd Totaal:", 113, rightY);
     doc.text(`EUR ${stats.totalVerifiedAmount.toFixed(2)}`, 147, rightY);
     rightY += itemSpacing;
@@ -2281,6 +3120,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100">
+      <style dangerouslySetInnerHTML={{ __html: dynamicCss }} />
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
@@ -2329,6 +3169,7 @@ export default function App() {
                     if (e.target.value) {
                       setView('dashboard');
                       setDashboardTab(e.target.value as any);
+                      playCyberBeep(700, 0.1);
                     }
                   }}
                   className="h-10 pl-3 pr-8 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-black uppercase tracking-wider text-slate-800 transition-all appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/10"
@@ -2342,7 +3183,10 @@ export default function App() {
             )}
             {userProfile?.role === 'admin' && (
               <button 
-                onClick={() => setView(view === 'admin' ? 'dashboard' : 'admin')}
+                onClick={() => {
+                  setView(view === 'admin' ? 'dashboard' : 'admin');
+                  playCyberBeep(950, 0.07);
+                }}
                 className={`p-2 rounded-lg transition-all ${view === 'admin' ? 'bg-amber-600 text-white shadow-lg shadow-amber-200' : 'text-slate-400 hover:text-amber-600 hover:bg-slate-50'}`}
                 title="Beheerderspaneel"
               >
@@ -2351,14 +3195,20 @@ export default function App() {
             )}
 
             <button 
-              onClick={() => setView(view === 'settings' ? 'dashboard' : 'settings')}
+              onClick={() => {
+                setView(view === 'settings' ? 'dashboard' : 'settings');
+                playCyberBeep(850, 0.07);
+              }}
               className={`p-2 rounded-lg transition-all ${view === 'settings' ? 'bg-blue-600 text-white shadow-lg shadow-blue-250' : 'text-slate-400 hover:text-blue-500 hover:bg-slate-50'}`}
               title="Instellingen / Beveiliging (2FA)"
             >
               <Settings size={20} />
             </button>
             <button 
-              onClick={handleLogout}
+              onClick={() => {
+                handleLogout();
+                playCyberBeep(400, 0.15, "triangle");
+              }}
               className="px-3 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-100 rounded-lg flex items-center gap-2 transition-all font-bold text-xs"
               title="Uitloggen"
             >
@@ -3231,6 +4081,33 @@ export default function App() {
               setView('dashboard');
             }}
             deleteDossier={deleteDossier}
+            layoutShape={layoutShape}
+            setLayoutShape={setLayoutShape}
+            layoutFont={layoutFont}
+            setLayoutFont={setLayoutFont}
+            layoutSize={layoutSize}
+            setLayoutSize={setLayoutSize}
+            layoutStyle={layoutStyle}
+            setLayoutStyle={setLayoutStyle}
+            cardShadow={cardShadow}
+            setCardShadow={setCardShadow}
+            bgPattern={bgPattern}
+            setBgPattern={setBgPattern}
+            buttonStyle={buttonStyle}
+            setButtonStyle={setButtonStyle}
+            inputFlatStyle={inputFlatStyle}
+            setInputFlatStyle={setInputFlatStyle}
+            headerStyle={headerStyle}
+            setHeaderStyle={setHeaderStyle}
+            pdfTheme={pdfTheme}
+            setPdfTheme={setPdfTheme}
+            crtEffect={crtEffect}
+            setCrtEffect={setCrtEffect}
+            audioFeedback={audioFeedback}
+            setAudioFeedback={setAudioFeedback}
+            glowText={glowText}
+            setGlowText={setGlowText}
+            PRESET_THEMES={PRESET_THEMES}
           />
         )}
 
@@ -3827,12 +4704,44 @@ function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDis
   );
 }
 
-function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
+function AdminView({ 
+  onBack, 
+  savedDossiers, 
+  loadDossier, 
+  deleteDossier,
+  layoutShape,
+  setLayoutShape,
+  layoutFont,
+  setLayoutFont,
+  layoutSize,
+  setLayoutSize,
+  layoutStyle,
+  setLayoutStyle,
+  cardShadow,
+  setCardShadow,
+  bgPattern,
+  setBgPattern,
+  buttonStyle,
+  setButtonStyle,
+  inputFlatStyle,
+  setInputFlatStyle,
+  headerStyle,
+  setHeaderStyle,
+  pdfTheme,
+  setPdfTheme,
+  crtEffect,
+  setCrtEffect,
+  audioFeedback,
+  setAudioFeedback,
+  glowText,
+  setGlowText,
+  PRESET_THEMES
+}: any) {
   const [users, setUsers] = useState<any[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [attempts, setAttempts] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'logs' | 'history'>('clients');
+  const [activeTab, setActiveTab] = useState<'users' | 'clients' | 'logs' | 'history' | 'design'>('clients');
   const [historySearch, setHistorySearch] = useState("");
   const [localToast, setLocalToast] = useState<string | null>(null);
 
@@ -3999,6 +4908,12 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
               className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'history' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Dossier Historie
+            </button>
+            <button 
+              onClick={() => setActiveTab('design')}
+              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all ${activeTab === 'design' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              Layout & Design Studio
             </button>
           </div>
         </div>
@@ -4281,7 +5196,7 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
             </table>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'history' ? (
         <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3">
@@ -4445,6 +5360,424 @@ function AdminView({ onBack, savedDossiers, loadDossier, deleteDossier }: any) {
               </div>
             </div>
           )}
+        </div>
+      ) : (
+        <div className="space-y-8">
+          <div className="bg-white rounded-3xl border border-slate-200 p-8 space-y-3 text-left">
+            <h3 className="text-xl font-black text-slate-800">Dynamic Design Studio</h3>
+            <p className="text-xs text-slate-500 font-medium">Configureer de complete visuele uitstraling, vormen, lettertypes, grootte en lay-out stijlen van PartVerify Pro direct. Kies uit 20 zorgvuldig samengestelde fabrieksthemavarianten of verfijn ze handmatig hieronder.</p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left sidebar controllers */}
+            <div className="space-y-6 lg:col-span-1">
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-6 text-left">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3">1. Lettertype (Font)</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Selecteer een professionele typografie die aansluit bij de gewenste huisstijl.</p>
+                  <select 
+                    value={layoutFont} 
+                    onChange={(e) => {
+                      setLayoutFont(e.target.value);
+                      localStorage.setItem("partverify_layout_font", e.target.value);
+                    }}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    {["Inter", "Space Grotesk", "Outfit", "Plus Jakarta Sans", "JetBrains Mono", "Playfair Display", "Lexend", "Sora", "Clash Display", "Quicksand", "Nunito", "DM Sans", "Syne", "Georgia", "Roboto", "Rubik"].map((f) => (
+                      <option key={f} value={f}>{f}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">2. Hoekvormen (Border Radius)</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Bepaal hoe strak of organisch de layout-elementen eruitzien.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "sharp", name: "Luxe Haaks (0px)" },
+                      { id: "slightly-rounded", name: "Sleek (6px)" },
+                      { id: "smooth", name: "Comfort (16px)" },
+                      { id: "pill", name: "Organic Pill (28px)" }
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => {
+                          setLayoutShape(s.id);
+                          localStorage.setItem("partverify_layout_shape", s.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          layoutShape === s.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {s.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">3. Layout Grootte & Densiteit</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Pas tekstgrootte en knop-tussenruimtes aan voor optimaal overzicht.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "compact", name: "Extra Compact" },
+                      { id: "standard", name: "Standaard" },
+                      { id: "comfortable", name: "Luchtig" },
+                      { id: "prominent", name: "Groots & Duidelijk" }
+                    ].map((sz) => (
+                      <button
+                        key={sz.id}
+                        onClick={() => {
+                          setLayoutSize(sz.id);
+                          localStorage.setItem("partverify_layout_size", sz.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          layoutSize === sz.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {sz.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">4. Kaart Schaduw & Diepte</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Configureer de diepte en schaduweffecten van de dashboardmodules.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "flat", name: "Vlak / Rand" },
+                      { id: "soft", name: "Subtiel modern" },
+                      { id: "deep", name: "Diepe schaduw" },
+                      { id: "glow", name: "Modern Gloed" }
+                    ].map((sh) => (
+                      <button
+                        key={sh.id}
+                        onClick={() => {
+                          setCardShadow(sh.id);
+                          localStorage.setItem("partverify_card_shadow", sh.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          cardShadow === sh.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {sh.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">5. Achtergrond Vullingen</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Kies een patroonoverlay voor de applicatie-achtergrond.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "solid", name: "Effen Kleur" },
+                      { id: "dots", name: "Stippatroon" },
+                      { id: "grid", name: "Systeem Grid" },
+                      { id: "abstract", name: "Zachte Golven" }
+                    ].map((bp) => (
+                      <button
+                        key={bp.id}
+                        onClick={() => {
+                          setBgPattern(bp.id);
+                          localStorage.setItem("partverify_bg_pattern", bp.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          bgPattern === bp.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {bp.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">6. Knoppen Stijloverlay</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium font-bold">Kies de weergave en interactiestijl van primaire knoppen.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "classic", name: "Klassiek Solide" },
+                      { id: "soft", name: "Zacht Getint" },
+                      { id: "outlined", name: "Alleen Rand" },
+                      { id: "vintage", name: "Retro / Vintage" }
+                    ].map((bt) => (
+                      <button
+                        key={bt.id}
+                        onClick={() => {
+                          setButtonStyle(bt.id);
+                          localStorage.setItem("partverify_button_style", bt.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          buttonStyle === bt.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {bt.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">7. Invoervelden Stijl</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Geef invoervelden een unieke rustige of juist strakke look.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "rounded", name: "Rond & Modern" },
+                      { id: "underline", name: "Onderstreping" },
+                      { id: "bordered", name: "Zware Randen" }
+                    ].map((ip) => (
+                      <button
+                        key={ip.id}
+                        onClick={() => {
+                          setInputFlatStyle(ip.id);
+                          localStorage.setItem("partverify_input_flat", ip.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          inputFlatStyle === ip.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {ip.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">8. Header Layout & Navigatie</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium">Configureer de plek en vormgeving van de bovenbalk header.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "standard", name: "Standaard Vast" },
+                      { id: "floating", name: "Zwevend Dashboard" },
+                      { id: "hybrid", name: "Glas-Transparant" }
+                    ].map((hs) => (
+                      <button
+                        key={hs.id}
+                        onClick={() => {
+                          setHeaderStyle(hs.id);
+                          localStorage.setItem("partverify_header_style", hs.id);
+                        }}
+                        className={`p-3 text-xs font-bold border rounded-xl transition-all ${
+                          headerStyle === hs.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {hs.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6">
+                  <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">9. PDF Verslag Stijlthema</h4>
+                  <p className="text-xs text-slate-400 mb-4 font-medium font-bold">Selecteer de visuele opmaak voor gegenereerde PDF bestanden.</p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {[
+                      { id: "theme-matched", name: "Dynamisch (Match Huisstijl-accent)" },
+                      { id: "classic-navy", name: "Klassiek Corporate Marineblauw" },
+                      { id: "monochrome", name: "Modern Minimalistisch Grijs" },
+                      { id: "printer-friendly", name: "Inktbesparend / Transparant" }
+                    ].map((pd) => (
+                      <button
+                        key={pd.id}
+                        onClick={() => {
+                          setPdfTheme(pd.id);
+                          localStorage.setItem("partverify_pdf_theme", pd.id);
+                        }}
+                        className={`p-3 text-xs font-bold text-left border rounded-xl transition-all flex items-center justify-between ${
+                          pdfTheme === pd.id 
+                            ? "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-100" 
+                            : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        <span>{pd.name}</span>
+                        {pdfTheme === pd.id && <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-6 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-2">10. Extreme Nerd Opties</h4>
+                    <p className="text-xs text-slate-400 mb-4 font-medium">Activeer nerd-achtige HUD-scanlijnen, neon gloeiing of synthesiser clicks.</p>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => {
+                        const newVal = !crtEffect;
+                        setCrtEffect(newVal);
+                        localStorage.setItem("partverify_crt_effect", newVal ? "true" : "false");
+                      }}
+                      className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+                        crtEffect 
+                          ? "bg-green-600/10 border-green-500 text-green-700 shadow-md shadow-green-100" 
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🖥️</span>
+                        <div className="text-left">
+                          <p className="font-extrabold text-[12px]">CRT Scanlijnen & Flicker</p>
+                          <p className="text-[10px] opacity-80 font-medium">Gesimuleerde retro-terminal trilling</p>
+                        </div>
+                      </div>
+                      <div className={`w-8 h-5 rounded-full p-0.5 transition-colors ${crtEffect ? "bg-green-500" : "bg-slate-300"}`}>
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${crtEffect ? "translate-x-3" : "translate-x-0"}`} />
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const newVal = !glowText;
+                        setGlowText(newVal);
+                        localStorage.setItem("partverify_glow_text", newVal ? "true" : "false");
+                      }}
+                      className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+                        glowText 
+                          ? "bg-purple-600/10 border-purple-500 text-purple-700 shadow-md shadow-purple-100" 
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">✨</span>
+                        <div className="text-left">
+                          <p className="font-extrabold text-[12px]">Neon Tekstgloed / Bloom</p>
+                          <p className="text-[10px] opacity-80 font-medium">Cyberpunk sfeergloed op alle titels</p>
+                        </div>
+                      </div>
+                      <div className={`w-8 h-5 rounded-full p-0.5 transition-colors ${glowText ? "bg-purple-500" : "bg-slate-300"}`}>
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${glowText ? "translate-x-3" : "translate-x-0"}`} />
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const newVal = !audioFeedback;
+                        setAudioFeedback(newVal);
+                        localStorage.setItem("partverify_audio_feedback", newVal ? "true" : "false");
+                        if (newVal) {
+                          try {
+                            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                            const osc = ctx.createOscillator();
+                            const gain = ctx.createGain();
+                            osc.type = "sine";
+                            osc.frequency.setValueAtTime(600, ctx.currentTime);
+                            osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.15);
+                            gain.gain.setValueAtTime(0.03, ctx.currentTime);
+                            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+                            osc.connect(gain);
+                            gain.connect(ctx.destination);
+                            osc.start();
+                            osc.stop(ctx.currentTime + 0.15);
+                          } catch (e) {}
+                        }
+                      }}
+                      className={`w-full p-3.5 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+                        audioFeedback 
+                          ? "bg-amber-600/10 border-amber-500 text-amber-700 shadow-md shadow-amber-100" 
+                          : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🔊</span>
+                        <div className="text-left">
+                          <p className="font-extrabold text-[12px]">Cyber Geluidseffecten</p>
+                          <p className="text-[10px] opacity-80 font-medium">Retro beep-clicks bij acties</p>
+                        </div>
+                      </div>
+                      <div className={`w-8 h-5 rounded-full p-0.5 transition-colors ${audioFeedback ? "bg-amber-500" : "bg-slate-300"}`}>
+                        <div className={`w-4 h-4 rounded-full bg-white transition-transform ${audioFeedback ? "translate-x-3" : "translate-x-0"}`} />
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right sidebar: 30+ themes presets grids */}
+            <div className="lg:col-span-2 space-y-4 text-left">
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">4. Kies 1 van de 30+ Specifieke Stijlen & Overlays</h4>
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-md">30+ Stijlen</span>
+                </div>
+                <p className="text-xs text-slate-400">Verander de gehele merkidentiteit van uw portaal met een enkele klik. Handmatige aanpassingen hiernaast blijven actueel.</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[580px] overflow-y-auto pr-2 custom-scrollbar">
+                  {PRESET_THEMES.map((theme: any, index: number) => {
+                    const isSelected = layoutStyle === theme.id;
+                    return (
+                      <button
+                        key={theme.id}
+                        onClick={() => {
+                          setLayoutStyle(theme.id);
+                          setLayoutFont(theme.font);
+                          setLayoutShape(theme.shape);
+                          setLayoutSize(theme.size);
+                          localStorage.setItem("partverify_layout_style", theme.id);
+                          localStorage.setItem("partverify_layout_font", theme.font);
+                          localStorage.setItem("partverify_layout_shape", theme.shape);
+                          localStorage.setItem("partverify_layout_size", theme.size);
+                          setLocalToast(`Preset "${theme.name}" succesvol geladen!`);
+                          setTimeout(() => setLocalToast(null), 3000);
+                        }}
+                        className={`text-left p-4 rounded-2xl border transition-all flex flex-col justify-between h-[120px] relative overflow-hidden group ${
+                          isSelected 
+                            ? "border-amber-500 ring-2 ring-amber-500/10 shadow-lg bg-orange-50/10" 
+                            : "border-slate-200 hover:border-slate-300 bg-white"
+                        }`}
+                      >
+                        {/* Background decor stripe */}
+                        <div className="absolute top-0 right-0 w-24 h-full opacity-10 group-hover:scale-110 transition-transform pointer-events-none" style={{ backgroundColor: theme.primary }} />
+
+                        <div className="space-y-1 z-10">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-400">STIJL {index + 1}</span>
+                            {isSelected && (
+                              <span className="px-2 py-0.5 bg-amber-500 text-white rounded-full text-[8px] font-extrabold uppercase animate-pulse">ACTIEF</span>
+                            )}
+                          </div>
+                          <h5 className="text-sm font-bold text-slate-900 group-hover:text-amber-600 transition-colors">{theme.name}</h5>
+                          <p className="text-[11px] text-slate-400 line-clamp-2 leading-snug">{theme.desc}</p>
+                        </div>
+
+                        {/* Styling preview bar */}
+                        <div className="flex items-center gap-2 z-10 mt-2">
+                          <div className="w-5 h-5 rounded-full border border-slate-100 flex items-center justify-center p-0.5 bg-white">
+                            <div className="w-full h-full rounded-full" style={{ backgroundColor: theme.primary }} />
+                          </div>
+                          <div className="w-5 h-5 rounded-full border border-slate-100 flex items-center justify-center p-0.5 bg-white">
+                            <div className="w-full h-full rounded-full" style={{ backgroundColor: theme.bgPage }} />
+                          </div>
+                          <div className="w-5 h-5 rounded-full border border-slate-100 flex items-center justify-center p-0.5 bg-white">
+                            <div className="w-full h-full rounded-full" style={{ backgroundColor: theme.cardBg }} />
+                          </div>
+                          <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">{theme.font}</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
       {localToast && (
