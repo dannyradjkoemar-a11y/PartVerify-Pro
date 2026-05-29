@@ -41,7 +41,8 @@ import {
   Camera,
   GraduationCap,
   Check,
-  ChevronDown
+  ChevronDown,
+  Edit2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -4789,6 +4790,12 @@ function AdminView({
   const [newPartDescription, setNewPartDescription] = useState("");
   const [newPartPrice, setNewPartPrice] = useState("");
 
+  // States for inline editing of client part prices
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editingPartNumber, setEditingPartNumber] = useState("");
+  const [editingPartDescription, setEditingPartDescription] = useState("");
+  const [editingPartPrice, setEditingPartPrice] = useState("");
+
   const [adminPriceUitlezen, setAdminPriceUitlezen] = useState("");
   const [adminUnitUitlezen, setAdminUnitUitlezen] = useState<"€" | "Ae">("€");
   const [adminPriceUitlijnen, setAdminPriceUitlijnen] = useState("");
@@ -4895,6 +4902,75 @@ function AdminView({
     setClientPrices(prev => prev.filter(p => p.id !== priceId));
   };
 
+  const deleteClient = async (clientId: string) => {
+    try {
+      // Delete all nested prices first
+      const pDocs = await getDocs(collection(db, "clients", clientId, "prices"));
+      for (const d of pDocs.docs) {
+        await deleteDoc(doc(db, "clients", clientId, "prices", d.id));
+      }
+      
+      // Delete the client doc
+      await deleteDoc(doc(db, "clients", clientId));
+      
+      // Update local state and selection
+      setClients(prev => prev.filter(c => c.id !== clientId));
+      if (selectedAdminClient === clientId) {
+        setSelectedAdminClient(null);
+        setClientPrices([]);
+      }
+      
+      setLocalToast("Opdrachtgever en bijbehorende prijsafspraken succesvol verwijderd!");
+      setTimeout(() => setLocalToast(null), 3050);
+    } catch (err) {
+      console.error("Fout bij verwijderen opdrachtgever:", err);
+      alert("Er is een fout opgetreden bij het verwijderen van de opdrachtgever.");
+    }
+  };
+
+  const startEditPrice = (p: any) => {
+    setEditingPriceId(p.id);
+    setEditingPartNumber(p.partNumber || "");
+    setEditingPartDescription(p.description || "");
+    setEditingPartPrice(String(p.price || ""));
+  };
+
+  const cancelEditPrice = () => {
+    setEditingPriceId(null);
+    setEditingPartNumber("");
+    setEditingPartDescription("");
+    setEditingPartPrice("");
+  };
+
+  const saveEditedPrice = async () => {
+    if (!selectedAdminClient || !editingPriceId || !editingPartNumber || !editingPartPrice) return;
+    try {
+      const priceDocRef = doc(db, "clients", selectedAdminClient, "prices", editingPriceId);
+      const updatedPriceVal = parseFloat(editingPartPrice.replace(',', '.')) || 0;
+      await updateDoc(priceDocRef, {
+        partNumber: editingPartNumber.trim(),
+        description: editingPartDescription.trim(),
+        price: updatedPriceVal,
+        updatedAt: serverTimestamp()
+      });
+
+      // Update local state
+      setClientPrices(prev => prev.map(p => p.id === editingPriceId ? {
+        ...p,
+        partNumber: editingPartNumber.trim(),
+        description: editingPartDescription.trim(),
+        price: updatedPriceVal
+      } : p));
+
+      setLocalToast("Prijsafspraak succesvol aangepast!");
+      setTimeout(() => setLocalToast(null), 3050);
+      cancelEditPrice();
+    } catch (err) {
+      console.error("Fout bij aanpassen prijsafspraak:", err);
+      alert("Er is een fout opgetreden bij het aanpassen van de prijsafspraak.");
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
@@ -4967,16 +5043,32 @@ function AdminView({
               <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Opdrachtgevers</h3>
               <div className="space-y-2">
                 {clients.map(c => (
-                  <button 
+                  <div 
                     key={c.id}
-                    onClick={() => setSelectedAdminClient(c.id)}
-                    className={`w-full p-4 text-left rounded-2xl border transition-all ${selectedAdminClient === c.id ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-slate-50 border-slate-100 hover:border-slate-200'}`}
+                    className={`w-full p-3 pl-4 pr-2 rounded-2xl border transition-all flex items-center justify-between gap-2 group ${selectedAdminClient === c.id ? 'bg-amber-50/80 border-amber-300/80 shadow-xs' : 'bg-slate-50 border-slate-100 hover:bg-slate-100/50 hover:border-slate-200'}`}
                   >
-                    <div className="font-bold text-slate-800">{c.name}</div>
-                    <div className="text-[10px] text-slate-400 uppercase tracking-tight mt-1">
-                      {c.id}
-                    </div>
-                  </button>
+                    <button 
+                      onClick={() => setSelectedAdminClient(c.id)}
+                      className="flex-1 text-left focus:outline-none"
+                    >
+                      <div className="font-bold text-slate-800 text-sm leading-tight">{c.name}</div>
+                      <div className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold font-mono mt-0.5">
+                        {c.id}
+                      </div>
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`Weet u zeker dat u de opdrachtgever "${c.name}" en al zijn gekoppelde prijsafspraken wilt wissen?`)) {
+                          deleteClient(c.id);
+                        }
+                      }}
+                      className="p-2 text-slate-300 hover:text-rose-600 rounded-xl hover:bg-rose-50 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity focus-within:opacity-100"
+                      title="Opdrachtgever verwijderen"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
@@ -5120,21 +5212,87 @@ function AdminView({
 
                 <div className="divide-y divide-slate-100">
                   {clientPrices.length > 0 ? (
-                    clientPrices.map(p => (
-                      <div key={p.id} className="py-4 flex items-center justify-between group">
-                        <div className="flex items-center gap-8">
-                          <code className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded w-32">{p.partNumber}</code>
-                          <div className="w-48 text-sm font-medium text-slate-700">{p.description}</div>
-                          <div className="text-sm font-black text-slate-900">€ {p.price.toFixed(2)}</div>
+                    clientPrices.map(p => {
+                      if (editingPriceId === p.id) {
+                        return (
+                          <div key={p.id} className="py-3 flex flex-wrap items-center justify-between gap-4 bg-amber-50/45 p-4 rounded-2xl border border-amber-200/80 my-2">
+                            <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[200px]">
+                              <div className="w-32 shrink-0">
+                                <label className="block text-[8px] font-black text-amber-800 uppercase tracking-wider mb-0.5">Partnummer</label>
+                                <input 
+                                  type="text"
+                                  value={editingPartNumber}
+                                  onChange={(e) => setEditingPartNumber(e.target.value)}
+                                  className="w-full p-2 text-xs border border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg bg-white font-mono font-bold text-slate-800"
+                                />
+                              </div>
+                              <div className="flex-1 min-w-[120px]">
+                                <label className="block text-[8px] font-black text-amber-800 uppercase tracking-wider mb-0.5">Omschrijving</label>
+                                <input 
+                                  type="text"
+                                  value={editingPartDescription}
+                                  onChange={(e) => setEditingPartDescription(e.target.value)}
+                                  className="w-full p-2 text-xs border border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg bg-white font-medium text-slate-800"
+                                />
+                              </div>
+                              <div className="w-24 shrink-0">
+                                <label className="block text-[8px] font-black text-amber-800 uppercase tracking-wider mb-0.5">Prijs (€)</label>
+                                <input 
+                                  type="text"
+                                  value={editingPartPrice}
+                                  onChange={(e) => setEditingPartPrice(e.target.value)}
+                                  className="w-full p-2 text-xs border border-amber-300 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 rounded-lg bg-white font-black text-slate-850"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button 
+                                onClick={saveEditedPrice}
+                                className="p-2.5 bg-amber-600 text-white rounded-xl hover:bg-amber-500 shadow-sm transition-all active:scale-95"
+                                title="Wijzigingen Opslaan"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <button 
+                                onClick={cancelEditPrice}
+                                className="p-2.5 bg-white text-slate-400 border border-slate-250 rounded-xl hover:bg-slate-50 transition-all"
+                                title="Annuleren"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div key={p.id} className="py-3 flex items-center justify-between group hover:bg-slate-50/50 px-2 rounded-2xl transition-all">
+                          <div className="flex items-center gap-6">
+                            <code className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg w-32 shrink-0">{p.partNumber}</code>
+                            <div className="w-48 text-sm font-medium text-slate-700 truncate">{p.description || "Geen omschrijving"}</div>
+                            <div className="text-xs font-black text-emerald-800 bg-emerald-50/80 border border-emerald-100 px-3 py-1 rounded-xl">
+                              € {typeof p.price === 'number' ? p.price.toFixed(2) : parseFloat(p.price || 0).toFixed(2)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => startEditPrice(p)}
+                              className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                              title="Onderdeel wijzigen"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button 
+                              onClick={() => deletePrice(p.id)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                              title="Onderdeel verwijderen"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
                         </div>
-                        <button 
-                          onClick={() => deletePrice(p.id)}
-                          className="p-2 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="py-20 text-center text-slate-300 italic text-sm">Geen onderdelen gedefinieerd voor deze opdrachtgever.</div>
                   )}
