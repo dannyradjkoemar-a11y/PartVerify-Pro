@@ -320,11 +320,28 @@ export default function App() {
       alert("Voer minimaal een kenteken of dossiernummer in om het dossier op te slaan.");
       return;
     }
+
+    const targetCaseNumber = caseNumber || "Onbekend";
+    const targetLicensePlate = licensePlate || "Onbekend";
+
+    const existing = savedDossiers.find(d => 
+      d.caseNumber === targetCaseNumber && d.licensePlate === targetLicensePlate
+    );
+
+    if (existing) {
+      const confirmOverwrite = window.confirm(
+        `Er bestaat al een dossier met kenteken "${targetLicensePlate}" en dossiernummer "${targetCaseNumber}". Wilt u het bestaande dossier overschrijven met de huidige gegevens?`
+      );
+      if (!confirmOverwrite) {
+        return;
+      }
+    }
+
     const clientName = clients.find(c => c.id === selectedClientId)?.name || "Standaard";
     const newDossier = {
       id: `DOS-${Date.now()}`,
-      caseNumber: caseNumber || "Onbekend",
-      licensePlate: licensePlate || "Onbekend",
+      caseNumber: targetCaseNumber,
+      licensePlate: targetLicensePlate,
       kmStand: kmStand || "",
       chassisNumber: chassisNumber || "",
       vehicleData,
@@ -342,7 +359,7 @@ export default function App() {
     };
 
     const updated = [newDossier, ...savedDossiers.filter(d => 
-      !(d.caseNumber === caseNumber && d.licensePlate === licensePlate)
+      !(d.caseNumber === targetCaseNumber && d.licensePlate === targetLicensePlate)
     )].slice(0, 10);
 
     localStorage.setItem("partverify_dossiers", JSON.stringify(updated));
