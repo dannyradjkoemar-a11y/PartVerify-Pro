@@ -1466,7 +1466,7 @@ export default function App() {
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105); // slate-600
+    doc.setTextColor(15, 23, 42); // slate-900 (ultra high-contrast dark slate)
     doc.text("GEREGISTREERDE PRIJSAFPRAKEN OPDRACHTGEVER:", 18, agreementsY + 7.2);
 
     const prUitlezen = activeClient?.priceUitlezen;
@@ -1489,16 +1489,18 @@ export default function App() {
     else agreementsParts.push("Antiroest: —");
 
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59);
+    doc.setTextColor(30, 41, 59); // slate-800
     doc.text(agreementsParts.join("   |   "), 93, agreementsY + 7.2);
 
     // Checklist diagnostics panel
     let diagnosticY = 109;
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); // extrêmement soft slate background
     doc.roundedRect(14, diagnosticY, 182, 11, 2, 2, "FD");
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
+    doc.setTextColor(15, 23, 42); // slate-900 (ultra high-contrast dark slate)
     doc.text("DIAGNOSTISCHE EXTRAS & VERREKENINGEN:", 18, diagnosticY + 7.2);
 
     const checkListItems = [];
@@ -1509,7 +1511,7 @@ export default function App() {
     if (checkListItems.length === 0) checkListItems.push("Geen extra checklist-posten verwerkt");
 
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(16, 185, 129); // emerald-600
+    doc.setTextColor(5, 150, 105); // emerald-700 (premium deep emerald green for solid contrast)
     doc.text(checkListItems.join("  |  "), 93, diagnosticY + 7.2);
 
     // Reset general font settings
