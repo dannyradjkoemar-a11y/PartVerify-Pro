@@ -956,6 +956,19 @@ export default function App() {
     }
   }, []);
 
+  // Listen for Enter key to dismiss toast Msg notification popups (such as calculation cleaned)
+  useEffect(() => {
+    if (!toastMsg) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        setToastMsg(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toastMsg]);
+
   // Smart Automatic Metadata Extractor and Input Purger for Audatex Calculations
   useEffect(() => {
     if (!calcInput) return;
@@ -1080,6 +1093,8 @@ export default function App() {
     if (cleanPartsText && cleanPartsText !== calcInput) {
       setCalcInput(cleanPartsText);
       updates.push(`Onderdelen opgeschoond (${cleanPartsLines.length} stuks)`);
+    } else if (cleanPartsLines.length === 0) {
+      updates.push("❌ Let op: Geen onderdelen gevonden in deze calculatie!");
     }
 
     if (updates.length > 0) {
