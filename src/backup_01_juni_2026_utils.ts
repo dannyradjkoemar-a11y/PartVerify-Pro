@@ -200,29 +200,6 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Try to match lines with: [Part Number] [Description] [Quantity] [Unit Price] [Optional Discounts/percentages...] [Total Price]
-    // Example: N 10640501 Zeskantkraagbout (Combi) 2,0 € 6,70 0,00 % 41,0 % € 7,91
-    const qtyMatch = trimmed.match(/^([A-Z0-9\s.-]{3,})\s+(.+?)\s+([\d,.]+)\s+(?:€\s*)?([\d,.]+)\s+(?:[\d,.]+\s*%)?\s*(?:[\d,.]+\s*%)?\s*(?:€\s*)?([\d,.]+)$/);
-    if (qtyMatch) {
-      const partNumber = qtyMatch[1].trim();
-      const description = qtyMatch[2].trim();
-      const quantityVal = parseCurrency(qtyMatch[3]);
-      const unitPriceVal = parseCurrency(qtyMatch[4]);
-      
-      if (quantityVal > 0 && unitPriceVal > 0) {
-        // Calculate the total gross price (quantity * unitPrice) for matching against the calculation
-        const calculatedPrice = quantityVal * unitPriceVal;
-        parts.push({
-          id: '',
-          partNumber: partNumber,
-          description: description,
-          price: calculatedPrice,
-          originalLine: trimmed
-        });
-        continue;
-      }
-    }
-
     // Find all currency-like amounts. We exclude numbers followed by '%' to avoid picking up tax/discount rates.
     // Enhanced regex to capture thousand separators (e.g. 1.573,25)
     const priceMatches = Array.from(trimmed.matchAll(/(?:€\s*)?(\d+[\.\s]\d+[,.]\d{2}|\d+[,.]\d{2})(?!\s*%)/g));
@@ -551,5 +528,3 @@ export function scanAudatexCodes(text: string): ScannedCodeResult[] {
 
   return results;
 }
-
-
