@@ -2928,6 +2928,93 @@ export default function App() {
             </div>
           </div>
 
+          {/* Real-time Calculation Difference Box */}
+          {(() => {
+            const activeResults = results.filter(r => r.status !== 'removed');
+            const totalOriginalCalc = activeResults.reduce((acc, r) => acc + r.calc.price, 0);
+            const totalInvoices = activeResults.reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? r.calc.price), 0);
+            const realTimeDiff = totalInvoices - totalOriginalCalc;
+            const hasData = activeResults.length > 0;
+
+            if (!hasData) {
+              return (
+                <div className="bg-slate-50 border border-slate-100/80 rounded-2xl py-3 px-4 text-center text-xs font-semibold text-slate-400/80 tracking-wide select-none">
+                  Voeg een voorcalculatie-tekst toe om de real-time prijsvergelijking te starten.
+                </div>
+              );
+            }
+
+            return (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center shadow-xs"
+              >
+                {/* original calc */}
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
+                    Totaal Voorcalculatie
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-sm font-black text-slate-800">
+                      € {totalOriginalCalc.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">({activeResults.length} {activeResults.length === 1 ? 'regel' : 'regels'})</span>
+                  </div>
+                </div>
+
+                {/* matched invoices / overrides */}
+                <div className="flex flex-col text-left border-t md:border-t-0 md:border-x border-slate-100 pt-3 md:pt-0 md:px-4">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
+                    Totaal Inkoop / Tarieven
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-0.5 animate-pulse-slow">
+                    <span className="text-sm font-black text-blue-600">
+                      € {totalInvoices.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                      ({activeResults.filter(r => r.match || r.manualPrice !== undefined).length} geverifieerd)
+                    </span>
+                  </div>
+                </div>
+
+                {/* live difference */}
+                <div className="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-3 md:pt-0">
+                  <div className="text-left md:text-right">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 block">
+                      Financieel Verschil (Netto)
+                    </span>
+                    <span className={`text-base font-black tracking-tight ${
+                      realTimeDiff < -0.005 
+                        ? 'text-emerald-600' 
+                        : realTimeDiff > 0.005 
+                        ? 'text-rose-600 font-extrabold' 
+                        : 'text-slate-500'
+                    }`}>
+                      {realTimeDiff < -0.005 ? '-' : realTimeDiff > 0.005 ? '+' : ''}€ {Math.abs(realTimeDiff).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className={`p-2 rounded-xl shrink-0 ${
+                    realTimeDiff < -0.005 
+                      ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' 
+                      : realTimeDiff > 0.005 
+                      ? 'bg-rose-50 border border-rose-100 text-rose-600 animate-pulse' 
+                      : 'bg-slate-100 border border-slate-200 text-slate-400'
+                  }`}>
+                    {realTimeDiff < -0.005 ? (
+                      <CheckCircle2 size={16} />
+                    ) : realTimeDiff > 0.005 ? (
+                      <AlertCircle size={16} />
+                    ) : (
+                      <Check size={16} />
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })()}
+
           {/* ADAS/Alignment Alerts Section (Fills the former empty space perfectly below) */}
           <div className="border-t border-slate-100 pt-4 flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
