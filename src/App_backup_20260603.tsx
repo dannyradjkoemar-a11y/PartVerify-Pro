@@ -4044,14 +4044,7 @@ export default function App() {
                                   className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
                                 />
                               ) : (
-                                <div className={`font-semibold text-sm text-slate-800 flex items-center gap-1.5 ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>
-                                  {res.calc.quantity && res.calc.quantity > 1 && (
-                                    <span className="text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 uppercase leading-none">
-                                      {res.calc.quantity}x
-                                    </span>
-                                  )}
-                                  <span>{res.calc.description}</span>
-                                </div>
+                                <div className={`font-semibold text-sm text-slate-800 ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>{res.calc.description}</div>
                               )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
@@ -4174,14 +4167,7 @@ export default function App() {
                                         {res.calc.id}
                                       </span>
                                      <span className="text-slate-700 text-xs font-bold truncate max-w-[150px]" title={res.match.description}>
-                                       <>
-                                         {res.match.quantity && res.match.quantity > 1 && (
-                                           <span className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 uppercase leading-none mr-1 inline-block">
-                                             {res.match.quantity}x
-                                           </span>
-                                         )}
-                                         {res.match.description}
-                                       </>
+                                       {res.match.description}
                                      </span>
                                      {res.isSemantic && (
                                        <span title="Intelligente match op beschrijving" className="text-indigo-600 bg-indigo-50 border border-indigo-150 px-1 py-0.5 text-[8px] rounded font-bold uppercase tracking-widest">

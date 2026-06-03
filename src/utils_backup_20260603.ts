@@ -14,7 +14,6 @@ export interface AutomotivePart {
   partNumber: string;
   price: number;
   originalLine?: string;
-  quantity?: number;
 }
 
 export const semanticSynonyms: Record<string, string[]> = {
@@ -124,8 +123,8 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
         const nextTrimmed = lines[j].trim();
         if (!nextTrimmed) continue;
 
-        // Check if next line looks strictly like a price (optional Euro or trailing asterisk/letter)
-        const isPrice = /^[\d\.,\s]+[*A-Za-z€]?$/.test(nextTrimmed) || /^[€\s]*[\d\.,\s]+[*A-Za-z]?$/.test(nextTrimmed);
+        // Check if next line looks strictly like a price (optional Euro or trailing asterisk)
+        const isPrice = /^[\d\.,\s]+[*€]?$/.test(nextTrimmed) || /^[€\s]*[\d\.,\s]+[*]?$/.test(nextTrimmed);
         if (isPrice && nextTrimmed.length < 20) {
           nextPriceIndex = j;
           priceText = nextTrimmed;
@@ -148,68 +147,47 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    const idMatch = trimmed.match(/^(\d{4})\b/);
-    if (!idMatch) continue;
+    // Matches common calculation format: [ID] [DESC] [PART_NUM] [PRICE]
+    // Example: 0257 KENTEKENPLAAT V KNPL3 23.37
+    // Improved to handle more robust spacing and part number chars including thousand separators in price
+    // Note: added * to part number allowed chars logic
+    const match = trimmed.match(/^(\d{4})\s+(.+?)\s{2,}([*A-Z0-9\s/.-]{2,})\s{2,}([\d\.,\s]+)$/);
+    
+    if (match) {
+      const baseId = match[1];
+      const count = seenIds.get(baseId) || 0;
+      const id = count === 0 ? baseId : `${baseId}-${count}`;
+      seenIds.set(baseId, count + 1);
 
-    const baseId = idMatch[1];
-    const remainder = trimmed.substring(4).trim();
+      parts.push({
+        id: id,
+        description: match[2].trim(),
+        partNumber: match[3].trim(),
+        price: parseCurrency(match[4]),
+        originalLine: trimmed
+      });
+    } else {
+      // Fallback for lines that don't match perfectly
+      // Try to find a part number and price at the end
+      const parts_list = trimmed.split(/\s{2,}/).filter(p => p.trim());
+      if (parts_list.length >= 3) {
+        const price = parseCurrency(parts_list[parts_list.length - 1]);
+        if (price > 0) {
+          const baseId = parts_list[0];
+          const count = seenIds.get(baseId) || 0;
+          const id = count === 0 ? baseId : `${baseId}-${count}`;
+          seenIds.set(baseId, count + 1);
 
-    // Check if remainder has a valid numerical price at the end
-    // Price pattern: digits, optional dot/comma, optional trailing characters like * or capital letters (like B or H)
-    const priceMatch = remainder.match(/\s+([\d.,]+[*A-Z€]?)$/i);
-    if (!priceMatch) {
-      // Skip this line if it doesn't have a numerical price ending (e.g. "ZIE LOSSE DELEN")
-      // "Ik zou graag willen zien dat in zón geval code 0350 wordt verwijderd, want deze heeft geen waarde"
-      continue;
-    }
-
-    const priceStr = priceMatch[1];
-    const priceVal = parseCurrency(priceStr);
-
-    if (priceVal <= 0) {
-      continue;
-    }
-
-    const leftover = remainder.substring(0, remainder.length - priceStr.length).trim();
-
-    // Split leftover by multiple spaces (to separate quantity, description, part numbers if available)
-    const partsList = leftover.split(/\s{2,}/).map(p => p.trim()).filter(Boolean);
-
-    let description = "";
-    let partNumber = "";
-    let quantityValue = 1;
-
-    // Detect quantity pattern at the start (e.g., "2 P", "4 P", "2 STUKS", etc.)
-    if (partsList.length > 0) {
-      const firstPart = partsList[0];
-      const qtyMatch = firstPart.match(/^(\d+)\s*(?:P|STUKS|ST|PCS)$/i);
-      if (qtyMatch) {
-        quantityValue = parseInt(qtyMatch[1], 10);
-        partsList.shift(); // Remove quantity from partsList
+          parts.push({
+            id: id,
+            description: parts_list[1],
+            partNumber: parts_list[parts_list.length - 2],
+            price: price,
+            originalLine: trimmed
+          });
+        }
       }
     }
-
-    if (partsList.length === 0) {
-      description = `Onderdeel ${baseId}`;
-    } else if (partsList.length === 1) {
-      description = partsList[0];
-    } else {
-      partNumber = partsList[partsList.length - 1];
-      description = partsList.slice(0, partsList.length - 1).join(" ");
-    }
-
-    const count = seenIds.get(baseId) || 0;
-    const id = count === 0 ? baseId : `${baseId}-${count}`;
-    seenIds.set(baseId, count + 1);
-
-    parts.push({
-      id: id,
-      description: description,
-      partNumber: partNumber,
-      price: priceVal,
-      originalLine: trimmed,
-      quantity: quantityValue
-    });
   }
   return parts;
 };
@@ -222,49 +200,8 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    const partNumMatch = trimmed.match(/^([A-Z0-9\s.-]{3,})\s+/);
-    if (partNumMatch) {
-      const partNumber = partNumMatch[1].trim();
-      const lineRemainder = trimmed.substring(partNumMatch[0].length).trim();
-
-      // Remove any percentage groupings (discounts) to avoid picking them up as standard numbers
-      const withoutDiscounts = lineRemainder.replace(/[\d,.]+\s*%/g, "").trim();
-
-      // Extract all numeric/currency words
-      const numMatches = Array.from(withoutDiscounts.matchAll(/(?:€\s*)?(\d+[,.]\d+|\d+)/g));
-      if (numMatches.length >= 2) {
-        const lastMatch = numMatches[numMatches.length - 1][0];
-        const secondLastMatch = numMatches[numMatches.length - 2][0];
-        
-        const totalPriceVal = parseCurrency(lastMatch);
-        const unitPriceVal = parseCurrency(secondLastMatch);
-        
-        let quantityVal = 1;
-        if (numMatches.length >= 3) {
-          const thirdLastMatch = numMatches[numMatches.length - 3][0];
-          quantityVal = parseCurrency(thirdLastMatch);
-        }
-
-        // Validate unit price and quantity
-        if (quantityVal > 0 && unitPriceVal > 0 && totalPriceVal > 0) {
-          const calculatedPrice = quantityVal * unitPriceVal;
-          const firstNumIndex = withoutDiscounts.indexOf(numMatches[0][0]);
-          const description = withoutDiscounts.substring(0, firstNumIndex).trim();
-
-          parts.push({
-            id: '',
-            partNumber: partNumber,
-            description: description || "Onderdeel",
-            price: calculatedPrice,
-            originalLine: trimmed,
-            quantity: quantityVal
-          });
-          continue;
-        }
-      }
-    }
-
-    // Existing fallback 1: Regex match
+    // Try to match lines with: [Part Number] [Description] [Quantity] [Unit Price] [Optional Discounts/percentages...] [Total Price]
+    // Example: N 10640501 Zeskantkraagbout (Combi) 2,0 € 6,70 0,00 % 41,0 % € 7,91
     const qtyMatch = trimmed.match(/^([A-Z0-9\s.-]{3,})\s+(.+?)\s+([\d,.]+)\s+(?:€\s*)?([\d,.]+)\s+(?:[\d,.]+\s*%)?\s*(?:[\d,.]+\s*%)?\s*(?:€\s*)?([\d,.]+)$/);
     if (qtyMatch) {
       const partNumber = qtyMatch[1].trim();
@@ -273,26 +210,29 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
       const unitPriceVal = parseCurrency(qtyMatch[4]);
       
       if (quantityVal > 0 && unitPriceVal > 0) {
+        // Calculate the total gross price (quantity * unitPrice) for matching against the calculation
         const calculatedPrice = quantityVal * unitPriceVal;
         parts.push({
           id: '',
           partNumber: partNumber,
           description: description,
           price: calculatedPrice,
-          originalLine: trimmed,
-          quantity: quantityVal
+          originalLine: trimmed
         });
         continue;
       }
     }
 
-    // Existing fallback 2: Max price and part number matching
+    // Find all currency-like amounts. We exclude numbers followed by '%' to avoid picking up tax/discount rates.
+    // Enhanced regex to capture thousand separators (e.g. 1.573,25)
     const priceMatches = Array.from(trimmed.matchAll(/(?:€\s*)?(\d+[\.\s]\d+[,.]\d{2}|\d+[,.]\d{2})(?!\s*%)/g));
     const prices = priceMatches.map(m => parseCurrency(m[1]));
     const maxPrice = prices.length > 0 ? Math.max(...prices) : 0;
 
     if (maxPrice === 0) continue;
 
+    // Extract Part Number and Description
+    // We assume the part number is usually at the start of the line
     const match = trimmed.match(/^([A-Z0-9\s.-]{5,})\s+(.+?)(?:\s+\d+[,.]\d+)?\s+(?:€|(?:\d+[,.]\d{2}))/);
 
     if (match) {
@@ -304,6 +244,7 @@ export const parseInvoice = (text: string): AutomotivePart[] => {
         originalLine: trimmed
       });
     } else {
+      // More relaxed fallback for invoice lines
       const words = trimmed.split(/\s+/);
       if (words[0].length >= 4) {
         parts.push({
