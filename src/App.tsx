@@ -208,7 +208,7 @@ export default function App() {
       primaryHover: "#caa14e",
       bgPage: "#0a0b0e",
       cardBg: "#12141c",
-      textColor: "#f3f4f6",
+      textColor: "#e1ded6",
       font: "Plus Jakarta Sans",
       shape: "slightly-rounded",
       size: "compact"
@@ -847,7 +847,7 @@ export default function App() {
 
       ${isDark ? `
         .text-slate-900, .text-slate-800, .text-slate-700, .text-slate-950, .text-gray-900, .text-slate-600 {
-          color: #f1f5f9 !important;
+          color: ${textColor} !important;
         }
         .text-slate-500, .text-slate-400, .text-gray-500, .text-slate-450 {
           color: #94a3b8 !important;
@@ -880,9 +880,27 @@ export default function App() {
           box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3) !important;
         }
         .text-slate-705 {
-          color: #f1f5f9 !important;
+          color: ${textColor} !important;
         }
       ` : ''}
+
+      /* Extreme overrides for realistic Dutch yellow license plates under any theme */
+      .dutch-plate-container, .dutch-plate-container *, [class*="dutch-plate-container"], [class*="dutch-plate-container"] * {
+        background-color: #FFDE00 !important;
+        background-image: none !important;
+        color: #0f172a !important;
+        border-color: #0f172a !important;
+      }
+      input.dutch-plate-input, .dutch-plate-container input, .dutch-plate-input {
+        color: #0f172a !important;
+        background-color: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+      }
+      .dutch-plate-container input::placeholder, .dutch-plate-input::placeholder {
+        color: rgba(15, 23, 42, 0.3) !important;
+      }
 
       .bg-blue-600, .bg-blue-500 {
         background-color: ${primary} !important;
@@ -2883,7 +2901,7 @@ export default function App() {
             <div className="w-full">
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
               <div className="flex items-center gap-3">
-                <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-14 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+                <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-14 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900 dutch-plate-container">
                   <div className="bg-[#0039AE] text-white text-[10px] w-8 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
                     <span className="text-[10px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
                     <span className="text-[11px] font-sans font-black tracking-normal leading-none select-none">NL</span>
@@ -2893,7 +2911,7 @@ export default function App() {
                     type="text"
                     placeholder="AB-123-C"
                     maxLength={11}
-                    className="w-full bg-transparent text-center text-lg md:text-xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20"
+                    className="w-full bg-transparent text-center text-lg md:text-xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20 dutch-plate-input"
                     value={licensePlate}
                     onChange={(e) => setLicensePlate(e.target.value)}
                   />
@@ -3418,7 +3436,7 @@ export default function App() {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
                   <div className="flex items-center gap-3">
                     {/* Dutch styled license plate input - Upgraded for premium readability & visual rest */}
-                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-16 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900">
+                    <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-16 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900 dutch-plate-container">
                       {/* EU/NL banner - Optimized for height & crisp typography */}
                       <div className="bg-[#0039AE] text-white text-[10px] w-10 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
                         <span className="text-[12px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
@@ -3430,7 +3448,7 @@ export default function App() {
                         type="text"
                         placeholder="AB-123-C"
                         maxLength={11}
-                        className="w-full bg-transparent text-center text-xl md:text-2xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20"
+                        className="w-full bg-transparent text-center text-xl md:text-2xl font-black font-mono placeholder:text-slate-900/30 text-slate-900 focus:outline-none uppercase tracking-[0.08em] px-2 selection:bg-slate-900/20 dutch-plate-input"
                         value={licensePlate}
                         onChange={(e) => setLicensePlate(e.target.value)}
                       />
