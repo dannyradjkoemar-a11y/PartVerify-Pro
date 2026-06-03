@@ -204,12 +204,12 @@ export default function App() {
     {
       id: "maybach-obsidian",
       name: "Maybach Obsidian & Champagne Rose Gold",
-      desc: "Pure luxe en premium perfectie: gitzwarte obsidiaan, titaangrijze lijnen en vorstelijk champagne-roségoud.",
-      primary: "#e2b867",
+      desc: "Pure luxe en premium perfectie: geraffineerd diep titaangrijs, contrasterend satijnbruin/houtskool en vorstelijk champagneglans.",
+      primary: "#e5b85c",
       primaryHover: "#caa14e",
-      bgPage: "#0a0b0e",
-      cardBg: "#12141c",
-      textColor: "#e1ded6",
+      bgPage: "#11131c",
+      cardBg: "#1b1e2c",
+      textColor: "#f3f1eb",
       font: "Plus Jakarta Sans",
       shape: "slightly-rounded",
       size: "compact"
@@ -642,7 +642,7 @@ export default function App() {
     }
 
     const { primary, primaryHover, bgPage, cardBg, textColor } = selectedTheme;
-    const isDark = bgPage === "#0f172a" || bgPage === "#18181b" || bgPage === "#090d16" || bgPage === "#0a0a0a" || bgPage === "#050c05" || bgPage === "#121319" || bgPage === "#171923" || bgPage === "#0a0b0e";
+    const isDark = bgPage === "#0f172a" || bgPage === "#18181b" || bgPage === "#090d16" || bgPage === "#0a0a0a" || bgPage === "#050c05" || bgPage === "#121319" || bgPage === "#171923" || bgPage === "#0a0b0e" || bgPage === "#11131c";
 
     let shadowCss = "";
     if (cardShadow === "flat") {
