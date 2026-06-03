@@ -44,7 +44,8 @@ import {
   ChevronDown,
   Edit2,
   Upload,
-  Link
+  Link,
+  Database
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -920,6 +921,16 @@ export default function App() {
       }
       .dutch-plate-container input::placeholder, .dutch-plate-input::placeholder {
         color: rgba(15, 23, 42, 0.3) !important;
+      }
+
+      /* Force RDW button and yellow RDW badges to remain eye-friendly, high-contrast, obsidian black */
+      .rdw-button-text[class*="bg-yellow-300"], 
+      .rdw-button-text[class*="bg-yellow-300"] *, 
+      .bg-yellow-300, 
+      .bg-yellow-300 *, 
+      .bg-yellow-400, 
+      .bg-yellow-400 * {
+        color: #0f172a !important;
       }
 
       .bg-blue-600, .bg-blue-500 {
@@ -2945,7 +2956,7 @@ export default function App() {
                       }
                     }}
                     disabled={vehicleLoading}
-                    className={`h-14 px-3.5 rounded-2xl font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                    className={`h-14 px-3.5 rounded-2xl font-black text-[10px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none rdw-button-text ${
                       vehicleData 
                         ? 'bg-yellow-300 text-slate-950 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
                         : vehicleLoading 
@@ -3482,12 +3493,12 @@ export default function App() {
                            }
                         }}
                         disabled={vehicleLoading}
-                        className={`h-16 px-4 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none ${
+                        className={`h-16 px-4 rounded-2xl font-black text-[11px] uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-sm active:scale-95 shrink-0 select-none rdw-button-text ${
                           vehicleData 
                             ? 'bg-yellow-300 text-slate-950 border border-yellow-400 hover:bg-yellow-400 hover:shadow-md' 
                             : vehicleLoading 
                             ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/50' 
-                            : 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100 hover:text-blue-700'
+                            : 'bg-blue-50 text-blue-600 border border-blue-105 hover:bg-blue-101 hover:text-blue-707'
                         }`}
                         title={vehicleData ? "Bekijk RDW Voertuiggegevens" : "Wacht even tot de RDW data is geladen"}
                       >
@@ -4989,6 +5000,149 @@ function AdminView({
   const [newPartDescription, setNewPartDescription] = useState("");
   const [newPartPrice, setNewPartPrice] = useState("");
 
+  // Client database bulk import & export states
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importType, setImportType] = useState<"merge" | "overwrite">("merge");
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+
+  const exportDatabase = async () => {
+    setIsExporting(true);
+    try {
+      const dbData = [];
+      for (const client of clients) {
+        const pDocs = await getDocs(collection(db, "clients", client.id, "prices"));
+        const prices = pDocs.docs.map(d => ({
+          partNumber: d.data().partNumber || "",
+          description: d.data().description || "",
+          price: d.data().price || 0
+        }));
+        dbData.push({
+          name: client.name || "",
+          priceUitlezen: client.priceUitlezen ?? 0,
+          unitUitlezen: client.unitUitlezen ?? "€",
+          priceUitlijnen: client.priceUitlijnen ?? 0,
+          priceKoelvloeistof: client.priceKoelvloeistof ?? 0,
+          priceAntiroest: client.priceAntiroest ?? 0,
+          pricePortierfolie: client.pricePortierfolie ?? 0,
+          priceDempingsmatten: client.priceDempingsmatten ?? 0,
+          priceListLink: client.priceListLink ?? "",
+          prices
+        });
+      }
+      
+      const jsonStr = JSON.stringify(dbData, null, 2);
+      const blob = new Blob([jsonStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `partverify_opdrachtgevers_backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setLocalToast("Database succesvol geëxporteerd!");
+      setTimeout(() => setLocalToast(null), 3000);
+    } catch (err) {
+      console.error(err);
+      alert("Fout bij exporteren database!");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const importDatabase = async (jsonData: string, mode: "merge" | "overwrite") => {
+    setIsImporting(true);
+    setImportStatus("Database aan het verwerken...");
+    try {
+      const parsed = JSON.parse(jsonData);
+      if (!Array.isArray(parsed)) {
+        throw new Error("Ongeldig bestandsformaat. Het bestand moet een JSON array van opdrachtgevers bevatten.");
+      }
+
+      setImportStatus("Gegevens valideren...");
+      for (const item of parsed) {
+        if (!item.name) {
+          throw new Error("Elke opdrachtgever in de database moet een 'name' veld hebben.");
+        }
+      }
+
+      if (mode === "overwrite") {
+        setImportStatus("Bestaande database aan het legen...");
+        for (const c of clients) {
+          const pDocs = await getDocs(collection(db, "clients", c.id, "prices"));
+          for (const d of pDocs.docs) {
+            await deleteDoc(doc(db, "clients", c.id, "prices", d.id));
+          }
+          await deleteDoc(doc(db, "clients", c.id));
+        }
+      }
+
+      setImportStatus("Nieuwe opdrachtgevers importeren...");
+      let importedCount = 0;
+      let pricesCount = 0;
+
+      for (const item of parsed) {
+        let clientId = "";
+        let existingClient = mode === "merge" ? clients.find(c => c.name.toLowerCase() === item.name.toLowerCase()) : null;
+
+        const clientPayload = {
+          name: item.name,
+          priceUitlezen: parseFloat(String(item.priceUitlezen || 0)) || 0,
+          unitUitlezen: item.unitUitlezen === "Ae" ? "Ae" : "€",
+          priceUitlijnen: parseFloat(String(item.priceUitlijnen || 0)) || 0,
+          priceKoelvloeistof: parseFloat(String(item.priceKoelvloeistof || 0)) || 0,
+          priceAntiroest: parseFloat(String(item.priceAntiroest || 0)) || 0,
+          pricePortierfolie: parseFloat(String(item.pricePortierfolie || 0)) || 0,
+          priceDempingsmatten: parseFloat(String(item.priceDempingsmatten || 0)) || 0,
+          priceListLink: item.priceListLink || "",
+          createdAt: serverTimestamp()
+        };
+
+        if (existingClient) {
+          clientId = existingClient.id;
+          await updateDoc(doc(db, "clients", clientId), clientPayload);
+        } else {
+          const docRef = await addDoc(collection(db, "clients"), clientPayload);
+          clientId = docRef.id;
+          importedCount++;
+        }
+
+        if (Array.isArray(item.prices)) {
+          setImportStatus(`Prijzen toevoegen voor ${item.name}...`);
+          
+          if (existingClient) {
+            const existingPricesDocs = await getDocs(collection(db, "clients", clientId, "prices"));
+            for (const ep of existingPricesDocs.docs) {
+              await deleteDoc(doc(db, "clients", clientId, "prices", ep.id));
+            }
+          }
+
+          for (const pr of item.prices) {
+            if (pr.partNumber) {
+              await addDoc(collection(db, "clients", clientId, "prices"), {
+                partNumber: String(pr.partNumber),
+                description: pr.description || "",
+                price: parseFloat(String(pr.price || 0)) || 0,
+                updatedAt: serverTimestamp()
+              });
+              pricesCount++;
+            }
+          }
+        }
+      }
+
+      setImportStatus(null);
+      setLocalToast(`Succesvol ${importedCount} opdrachtgevers en ${pricesCount} prijsafspraken geïmporteerd!`);
+      setTimeout(() => setLocalToast(null), 4050);
+      loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert(`Fout bij importeren: ${err?.message || "Ongeldig bestand of syntax-fout."}`);
+      setImportStatus(null);
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   // States for inline editing of client part prices
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [editingPartNumber, setEditingPartNumber] = useState("");
@@ -5284,6 +5438,127 @@ function AdminView({
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Database Bulk Import & Export Card */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 space-y-4">
+              <div className="flex items-center gap-2 text-slate-800">
+                <Database size={16} className="text-amber-600" />
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-700">Database Beheer</h3>
+              </div>
+              <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                Exporteer de volledige database (opdrachtgevers en prijslijsten) als JSON, of laad een vooraf ingevulde database in.
+              </p>
+
+              <button
+                type="button"
+                onClick={exportDatabase}
+                disabled={isExporting}
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 shadow-xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                <FileDown size={14} />
+                {isExporting ? "Aan het exporteren..." : "Exporteer Database (JSON)"}
+              </button>
+
+              <div className="border-t border-slate-100 my-2"></div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
+                  <span>Importmethode:</span>
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                    <button
+                      type="button"
+                      onClick={() => setImportType("merge")}
+                      className={`px-2 py-1 text-[9px] uppercase font-black rounded-md transition-all cursor-pointer ${
+                        importType === "merge"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Samenvoegen
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setImportType("overwrite")}
+                      className={`px-2 py-1 text-[9px] uppercase font-black rounded-md transition-all cursor-pointer ${
+                        importType === "overwrite"
+                          ? "bg-rose-600 text-white shadow-xs"
+                          : "text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      Overschrijven
+                    </button>
+                  </div>
+                </div>
+
+                {importType === "overwrite" && (
+                  <p className="text-[10px] bg-rose-50 border border-rose-100 text-rose-700 p-2.5 rounded-xl leading-relaxed font-semibold">
+                    ⚠️ Bestaande opdrachtgevers en gekoppelde prijslijsten worden bij het inlezen volledig gewist!
+                  </p>
+                )}
+
+                <label className="flex items-center justify-center border border-dashed border-slate-300 rounded-xl p-4 hover:border-slate-400 cursor-pointer text-xs font-bold text-slate-500 bg-slate-50/50 hover:bg-slate-50 transition-all min-h-[64px] text-center">
+                  <div className="flex flex-col items-center gap-1.5">
+                    <Upload size={16} className="text-slate-400 animate-pulse" />
+                    <span>Selecteer database (.json)</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="application/json"
+                    onClick={(e) => {
+                      (e.target as any).value = null;
+                    }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      
+                      const confirmMsg = importType === "overwrite"
+                        ? "⚠️ WEET U ABSOLUUT ZEKER DAT U DIT WILT? Al uw bestaande opdrachtgevers en prijzen worden PERMANENT GEWIST!"
+                        : "Weet u zeker dat u de gekozen database wilt inladen en samenvoegen met uw bestaande opdrachtgevers?";
+                        
+                      if (!confirm(confirmMsg)) return;
+
+                      const reader = new FileReader();
+                      reader.onload = async (event) => {
+                        const content = event.target?.result as string;
+                        if (content) {
+                          await importDatabase(content, importType);
+                        }
+                      };
+                      reader.readAsText(file);
+                    }}
+                    className="hidden"
+                  />
+                </label>
+
+                {importStatus && (
+                  <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-100 text-amber-800 rounded-xl text-xs font-bold">
+                    <RefreshCw size={12} className="animate-spin text-amber-600 shrink-0" />
+                    <span>{importStatus}</span>
+                  </div>
+                )}
+              </div>
+
+              <details className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-600">
+                <summary className="font-semibold select-none">Bekijk JSON Structuur voorbeeld</summary>
+                <pre className="mt-2 p-2 bg-slate-50 border border-slate-100 rounded-lg text-[9px] font-mono overflow-x-auto text-slate-600">
+{`[
+  {
+    "name": "Allianz",
+    "priceUitlezen": 45.0,
+    "unitUitlezen": "€",
+    "priceUitlijnen": 95.0,
+    "prices": [
+      {
+        "partNumber": "A2058851224",
+        "description": "Rooster",
+        "price": 89.28
+      }
+    ]
+  }
+]`}
+                </pre>
+              </details>
             </div>
           </div>
 
