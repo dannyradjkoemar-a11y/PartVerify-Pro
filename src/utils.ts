@@ -155,8 +155,8 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
     const remainder = trimmed.substring(4).trim();
 
     // Check if remainder has a valid numerical price at the end
-    // Price pattern: digits, optional dot/comma, optional trailing characters like * or capital letters (like B or H)
-    const priceMatch = remainder.match(/\s+([\d.,]+[*A-Z€]?)$/i);
+    // Price pattern: digits, optional dot/comma, optional trailing characters like * or letters (like B or H), with or without spaces
+    const priceMatch = remainder.match(/\s+([\d,.]+(?:\s*[*A-Za-z€]+)?)$/i);
     if (!priceMatch) {
       // Skip this line if it doesn't have a numerical price ending (e.g. "ZIE LOSSE DELEN")
       // "Ik zou graag willen zien dat in zón geval code 0350 wordt verwijderd, want deze heeft geen waarde"

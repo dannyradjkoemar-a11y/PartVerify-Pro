@@ -1201,8 +1201,8 @@ export default function App() {
 
       if (inPartsSection) {
         const trimmed = line.trim();
-        // Keep lines inside O N D E R D E L E N that start with a 4-digit code (standard Audatex format)
-        const isPartLine = /^\d{4}\s+/.test(trimmed) && /[\d\.,\s+\*]+$/.test(trimmed);
+        // Keep lines inside O N D E R D E L E N that start with a 4-digit code and end with a numeric price (standard Audatex format)
+        const isPartLine = /^\d{4}\s+/.test(trimmed) && /\s+([\d,.]+(?:\s*[*A-Za-z€]+)?)$/i.test(trimmed);
         if (isPartLine && !trimmed.includes("CODE-NR") && !trimmed.includes("BENAMING")) {
           cleanPartsLines.push(trimmed);
         }
