@@ -2345,7 +2345,7 @@ export default function App() {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.setTextColor(255, 255, 255);
-    doc.text(`Uitvoerdraad: ${dateStr} ${timeStr}`, 130, 19);
+    doc.text(`Uitvoerdatum: ${dateStr} ${timeStr}`, 130, 19);
     
     const activeClient = clients.find(c => c.id === selectedClientId || c.name?.toLowerCase() === selectedClientId?.toLowerCase());
     const clientNameText = activeClient ? activeClient.name : "Standaard";
