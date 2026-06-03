@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { AUDATEX_PART_CODES } from "./data/audatexPartCodes";
+
 // Part matching logic and normalization
 export const normalizePartNumber = (part: string): string => {
   return part.replace(/[\s,.\-_/]/g, '').toUpperCase();
@@ -196,6 +198,17 @@ export const parseCalculation = (text: string): AutomotivePart[] => {
     } else {
       partNumber = partsList[partsList.length - 1];
       description = partsList.slice(0, partsList.length - 1).join(" ");
+    }
+
+    // Auto-enrich description or partNumber from our official Audatex codes dictionary
+    const audatexMatch = AUDATEX_PART_CODES.find(p => p.code === baseId);
+    if (audatexMatch) {
+      if (!description || description === `Onderdeel ${baseId}` || /^\s*$/.test(description)) {
+        description = audatexMatch.description;
+      }
+    }
+    if (!partNumber || partNumber === "00000500" || partNumber === "00000000") {
+      partNumber = baseId;
     }
 
     const count = seenIds.get(baseId) || 0;

@@ -68,11 +68,6 @@ import { ManualModal } from "./components/ManualModal";
 import { PhotoAnalysisTab } from "./components/PhotoAnalysisTab";
 import { AudatexCodesModal } from "./components/AudatexCodesModal";
 import SchadeObservatiesTab from "./components/SchadeObservatiesTab";
-import { 
-  searchAudatexParts, 
-  findAudatexPartByCode, 
-  findAudatexPartByDescription 
-} from "./data/audatexPartCodes";
 
 import { initializeApp } from "firebase/app";
 import { 
@@ -2261,22 +2256,7 @@ export default function App() {
   const updateManualPart = (id: string, field: keyof AutomotivePart, value: any) => {
     setManualParts(prev => prev.map(p => {
       if (p.id === id) {
-        const updated = { ...p, [field]: field === 'price' ? parseFloat(value) || 0 : value };
-        
-        // Auto-complete/Autofill based on Audatex code dictionary mapping
-        if (field === 'partNumber' && value) {
-          const match = findAudatexPartByCode(value);
-          if (match && (!p.description || p.description === "Nieuw Onderdeel" || p.description === "")) {
-            updated.description = match.description;
-          }
-        } else if (field === 'description' && value) {
-          const match = findAudatexPartByDescription(value);
-          if (match && (!p.partNumber || p.partNumber === "00000000" || p.partNumber === "")) {
-            updated.partNumber = match.code;
-          }
-        }
-        
-        return updated;
+        return { ...p, [field]: field === 'price' ? parseFloat(value) || 0 : value };
       }
       return p;
     }));
@@ -4059,26 +4039,12 @@ export default function App() {
                             </td>
                             <td className="px-6 py-4">
                               {res.calc.id.startsWith('MAN-') ? (
-                                <div className="flex flex-col gap-1">
-                                  <input 
-                                    type="text"
-                                    value={res.calc.description}
-                                    onChange={(e) => updateManualPart(res.calc.id, 'description', e.target.value)}
-                                    className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
-                                    placeholder="Omschrijving..."
-                                  />
-                                  {(() => {
-                                    const match = findAudatexPartByDescription(res.calc.description);
-                                    if (match && res.calc.description && res.calc.description !== "Nieuw Onderdeel") {
-                                      return (
-                                        <div className="text-[10px] text-blue-600 bg-blue-50/70 border border-blue-100 rounded px-1.5 py-0.5 mt-0.5 font-bold flex items-center gap-1 w-fit">
-                                          <span>💡 Audatex link: Code {match.code} ({match.description})</span>
-                                        </div>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-                                </div>
+                                <input 
+                                  type="text"
+                                  value={res.calc.description}
+                                  onChange={(e) => updateManualPart(res.calc.id, 'description', e.target.value)}
+                                  className="w-full bg-slate-50 border border-slate-200 rounded px-2 py-1 text-sm font-semibold focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
                               ) : (
                                 <div className={`font-semibold text-sm text-slate-800 flex items-center gap-1.5 ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>
                                   {res.calc.quantity && res.calc.quantity > 1 && (
@@ -4097,26 +4063,12 @@ export default function App() {
                             </td>
                             <td className="px-6 py-4">
                               {res.calc.id.startsWith('MAN-') ? (
-                                <div className="flex flex-col gap-1">
-                                  <input 
-                                    type="text"
-                                    value={res.calc.partNumber}
-                                    onChange={(e) => updateManualPart(res.calc.id, 'partNumber', e.target.value)}
-                                    className="w-28 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] font-mono focus:ring-1 focus:ring-blue-500 outline-none"
-                                    placeholder="Onderdeelnummer..."
-                                  />
-                                  {(() => {
-                                    const match = findAudatexPartByCode(res.calc.partNumber);
-                                    if (match && res.calc.partNumber && res.calc.partNumber !== "00000000") {
-                                      return (
-                                        <div className="text-[9px] text-emerald-700 bg-emerald-50/70 border border-emerald-100 rounded px-1.5 py-0.5 mt-0.5 font-mono font-bold flex items-center gap-1 w-fit">
-                                          <span>✓ {match.description}</span>
-                                        </div>
-                                      );
-                                    }
-                                    return null;
-                                  })()}
-                                </div>
+                                <input 
+                                  type="text"
+                                  value={res.calc.partNumber}
+                                  onChange={(e) => updateManualPart(res.calc.id, 'partNumber', e.target.value)}
+                                  className="w-28 bg-slate-50 border border-slate-200 rounded px-2 py-1 text-[11px] font-mono focus:ring-1 focus:ring-blue-500 outline-none"
+                                />
                               ) : (
                                 <code className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[11px] font-mono whitespace-nowrap border border-slate-200">
                                   {res.calc.partNumber}
