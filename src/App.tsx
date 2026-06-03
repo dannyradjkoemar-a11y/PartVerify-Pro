@@ -885,11 +885,31 @@ export default function App() {
       ` : ''}
 
       /* Extreme overrides for realistic Dutch yellow license plates under any theme */
-      .dutch-plate-container, .dutch-plate-container *, [class*="dutch-plate-container"], [class*="dutch-plate-container"] * {
+      .dutch-plate-container, [class*="dutch-plate-container"] {
         background-color: #FFDE00 !important;
         background-image: none !important;
         color: #0f172a !important;
         border-color: #0f172a !important;
+      }
+      .dutch-plate-container *:not(.dutch-plate-eu):not(.dutch-plate-eu *) {
+        background-color: #FFDE00 !important;
+        background-image: none !important;
+        color: #0f172a !important;
+        border-color: #0f172a !important;
+      }
+      /* Keep the blue EU banner genuine */
+      .dutch-plate-eu, .dutch-plate-container .dutch-plate-eu, [class*="dutch-plate-container"] .dutch-plate-eu {
+        background-color: #0039AE !important;
+        color: #ffffff !important;
+        border-color: rgba(15, 23, 42, 0.15) !important;
+      }
+      .dutch-plate-eu *, .dutch-plate-container .dutch-plate-eu *, [class*="dutch-plate-container"] .dutch-plate-eu * {
+        background-color: transparent !important;
+        color: #ffffff !important;
+      }
+      /* Keep EU stars yellow */
+      .dutch-plate-stars, .dutch-plate-container .dutch-plate-stars {
+        color: #FFDE00 !important;
       }
       input.dutch-plate-input, .dutch-plate-container input, .dutch-plate-input {
         color: #0f172a !important;
@@ -2902,8 +2922,8 @@ export default function App() {
               <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Kenteken</label>
               <div className="flex items-center gap-3">
                 <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-14 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900 dutch-plate-container">
-                  <div className="bg-[#0039AE] text-white text-[10px] w-8 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
-                    <span className="text-[10px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                  <div className="bg-[#0039AE] text-white text-[10px] w-8 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900 dutch-plate-eu">
+                    <span className="text-[10px] text-[#FFDE00] font-sans leading-none mb-1 select-none dutch-plate-stars">★★</span>
                     <span className="text-[11px] font-sans font-black tracking-normal leading-none select-none">NL</span>
                   </div>
                   
@@ -3438,8 +3458,8 @@ export default function App() {
                     {/* Dutch styled license plate input - Upgraded for premium readability & visual rest */}
                     <div className="relative flex items-center bg-[#FFDE00] text-slate-900 font-mono font-black border-[3px] border-slate-900 rounded-2xl overflow-hidden shadow-sm h-16 flex-1 max-w-[280px] transition-all hover:shadow-md focus-within:ring-4 focus-within:ring-blue-500/10 focus-within:border-slate-900 dutch-plate-container">
                       {/* EU/NL banner - Optimized for height & crisp typography */}
-                      <div className="bg-[#0039AE] text-white text-[10px] w-10 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900">
-                        <span className="text-[12px] text-[#FFDE00] font-sans leading-none mb-1 select-none">★★</span>
+                      <div className="bg-[#0039AE] text-white text-[10px] w-10 h-full flex flex-col items-center justify-center leading-none select-none shrink-0 border-r-2 border-slate-900/15 border-slate-900 dutch-plate-eu">
+                        <span className="text-[12px] text-[#FFDE00] font-sans leading-none mb-1 select-none dutch-plate-stars">★★</span>
                         <span className="text-[13px] font-sans font-black tracking-normal leading-none select-none">NL</span>
                       </div>
                       
@@ -4348,8 +4368,8 @@ export default function App() {
                     
                     <div className="flex items-center gap-4">
                       {/* Centered stylized license plate */}
-                      <div className="bg-[#FFD600] text-black font-mono font-black border-2 border-slate-950 px-4 py-1.5 rounded-xl flex items-center gap-3 tracking-wider text-base shadow-inner h-11 select-none">
-                        <div className="bg-[#0039AE] text-white text-[9px] px-1 py-0.5 rounded-md flex flex-col items-center justify-center leading-none font-sans h-5 self-center">
+                      <div className="bg-[#FFD600] text-black font-mono font-black border-2 border-slate-950 px-4 py-1.5 rounded-xl flex items-center gap-3 tracking-wider text-base shadow-inner h-11 select-none dutch-plate-container">
+                        <div className="bg-[#0039AE] text-white text-[9px] px-1 py-0.5 rounded-md flex flex-col items-center justify-center leading-none font-sans h-5 self-center dutch-plate-eu">
                           <span className="text-[7px] font-black tracking-tighter">NL</span>
                         </div>
                         <span className="text-sm tracking-[0.05em]">{licensePlate.toUpperCase().replace(/[^a-zA-Z0-9]/g, '').replace(/(.{2})(.{2})(.{2})/, '$1-$2-$3')}</span>
