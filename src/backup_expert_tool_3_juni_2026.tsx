@@ -67,7 +67,6 @@ import { BackdoorPanel } from "./components/BackdoorPanel";
 import { ManualModal } from "./components/ManualModal";
 import { PhotoAnalysisTab } from "./components/PhotoAnalysisTab";
 import { AudatexCodesModal } from "./components/AudatexCodesModal";
-import SchadeObservatiesTab from "./components/SchadeObservatiesTab";
 
 import { initializeApp } from "firebase/app";
 import { 
@@ -172,7 +171,7 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginStep, setLoginStep] = useState<'password' | 'tfa' | 'tfa-setup'>('password');
   const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
-  const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis' | 'training_center' | 'schade_observaties'>('verification');
+  const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis' | 'training_center'>('verification');
   const [readoutPre, setReadoutPre] = useState(false);
   const [readoutPost, setReadoutPost] = useState(false);
   const [alignmentStatus, setAlignmentStatus] = useState<'none' | 'intern' | 'extern'>('none');
@@ -3416,7 +3415,6 @@ export default function App() {
                   <option value="verification">📊 Calculatie Verificatie</option>
                   <option value="photo_analysis">📸 CarVerify Pro</option>
                   <option value="training_center">🎓 Training Center</option>
-                  <option value="schade_observaties">🔍 Schade Observaties</option>
                 </select>
                 <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
               </div>
@@ -4285,7 +4283,7 @@ export default function App() {
                 userId={user?.uid}
                 calcInput={calcInput}
               />
-            ) : dashboardTab === 'training_center' ? (
+            ) : (
               <PhotoAnalysisTab 
                 mode="training"
                 licensePlate={licensePlate}
@@ -4297,8 +4295,6 @@ export default function App() {
                 userId={user?.uid}
                 calcInput={calcInput}
               />
-            ) : (
-              <SchadeObservatiesTab playCyberBeep={playCyberBeep} />
             )}
           </div>
         ) : (
