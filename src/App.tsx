@@ -184,10 +184,10 @@ export default function App() {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
 
   // Premium Design Studio Styles state variables
-  const [layoutShape, setLayoutShape] = useState<string>(() => localStorage.getItem("partverify_layout_shape") || "smooth");
-  const [layoutFont, setLayoutFont] = useState<string>(() => localStorage.getItem("partverify_layout_font") || "Inter");
+  const [layoutShape, setLayoutShape] = useState<string>(() => localStorage.getItem("partverify_layout_shape") || "slightly-rounded");
+  const [layoutFont, setLayoutFont] = useState<string>(() => localStorage.getItem("partverify_layout_font") || "Plus Jakarta Sans");
   const [layoutSize, setLayoutSize] = useState<string>(() => localStorage.getItem("partverify_layout_size") || "standard");
-  const [layoutStyle, setLayoutStyle] = useState<string>(() => localStorage.getItem("partverify_layout_style") || "classic-blue");
+  const [layoutStyle, setLayoutStyle] = useState<string>(() => localStorage.getItem("partverify_layout_style") || "platinum-executive");
   const [cardShadow, setCardShadow] = useState<string>(() => localStorage.getItem("partverify_card_shadow") || "soft");
   const [bgPattern, setBgPattern] = useState<string>(() => localStorage.getItem("partverify_bg_pattern") || "solid");
   const [buttonStyle, setButtonStyle] = useState<string>(() => localStorage.getItem("partverify_button_style") || "classic");
@@ -200,6 +200,32 @@ export default function App() {
   const [fontSizeScale, setFontSizeScale] = useState<number>(() => parseFloat(localStorage.getItem("partverify_font_size_scale") || "1.0"));
 
   const PRESET_THEMES = useMemo(() => [
+    {
+      id: "maybach-obsidian",
+      name: "Maybach Obsidian & Champagne Rose Gold",
+      desc: "Pure luxe en premium perfectie: gitzwarte obsidiaan, titaangrijze lijnen en vorstelijk champagne-roségoud.",
+      primary: "#e2b867",
+      primaryHover: "#caa14e",
+      bgPage: "#0a0b0e",
+      cardBg: "#12141c",
+      textColor: "#f3f4f6",
+      font: "Plus Jakarta Sans",
+      shape: "slightly-rounded",
+      size: "compact"
+    },
+    {
+      id: "platinum-executive",
+      name: "Chamber of Commerce Platinum",
+      desc: "Smetteloos directeurs-wit, diep geslepen titaangrijs, royale margins en diep koninklijk platina-slatestaal.",
+      primary: "#0f172a",
+      primaryHover: "#1e293b",
+      bgPage: "#f4f5f7",
+      cardBg: "#ffffff",
+      textColor: "#0f172a",
+      font: "Plus Jakarta Sans",
+      shape: "slightly-rounded",
+      size: "comfortable"
+    },
     {
       id: "classic-blue",
       name: "Classic Corporate Blue",
@@ -615,7 +641,7 @@ export default function App() {
     }
 
     const { primary, primaryHover, bgPage, cardBg, textColor } = selectedTheme;
-    const isDark = bgPage === "#0f172a" || bgPage === "#18181b" || bgPage === "#090d16" || bgPage === "#0a0a0a" || bgPage === "#050c05" || bgPage === "#121319" || bgPage === "#171923";
+    const isDark = bgPage === "#0f172a" || bgPage === "#18181b" || bgPage === "#090d16" || bgPage === "#0a0a0a" || bgPage === "#050c05" || bgPage === "#121319" || bgPage === "#171923" || bgPage === "#0a0b0e";
 
     let shadowCss = "";
     if (cardShadow === "flat") {
@@ -3873,7 +3899,6 @@ export default function App() {
                         </div>
                       </th>
                       <th className="px-6 py-4">Factuur Match / Prijs</th>
-                      <th className="px-6 py-4">Verschil</th>
                       <th className="px-6 py-4 text-right">Acties</th>
                     </tr>
                   </thead>
@@ -4139,15 +4164,6 @@ export default function App() {
                                  </div>
                                )}
                              </td>
-                            <td className="px-6 py-4">
-                              {res.priceDiff !== 0 ? (
-                                <span className={`font-black text-base ${res.priceDiff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                                  {res.priceDiff > 0 ? '+' : ''}{res.priceDiff.toFixed(2)}
-                                </span>
-                              ) : (
-                                <span className="text-slate-305 font-bold">—</span>
-                              )}
-                            </td>
                             <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
                               <button 
                                 onClick={() => {
@@ -4168,7 +4184,7 @@ export default function App() {
                       })
                       ) : (
                         <tr>
-                          <td colSpan={9} className="px-6 py-20 text-center">
+                          <td colSpan={8} className="px-6 py-20 text-center">
                             <div className="flex flex-col items-center gap-3">
                               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
                                 <Search size={32} />
@@ -6605,6 +6621,26 @@ function InputSection({ title, placeholder, value, onChange, icon, partCount, on
               
               setTimeout(() => {
                 textarea.selectionStart = textarea.selectionEnd = start + formattedText.length;
+              }, 0);
+            } else if (title === "Inkoopfacturen") {
+              e.preventDefault();
+              let pastedText = e.clipboardData.getData("text");
+              
+              // Ensure pasted text ends with a newline, simulating hitting enter after paste
+              if (pastedText && !pastedText.endsWith("\n")) {
+                pastedText += "\n";
+              }
+              
+              const textarea = e.currentTarget;
+              const start = textarea.selectionStart;
+              const end = textarea.selectionEnd;
+              const text = textarea.value;
+              const newValue = text.substring(0, start) + pastedText + text.substring(end);
+              
+              onChange(newValue);
+              
+              setTimeout(() => {
+                textarea.selectionStart = textarea.selectionEnd = start + pastedText.length;
               }, 0);
             }
           }}
