@@ -2488,16 +2488,7 @@ export default function App() {
     printStatusCounter("Ontbrekend", stats.missing, [244, 63, 94], 113, rightY);
 
     // Slide in the Price Agreements line
-    let agreementsY = 94;
-    doc.setDrawColor(226, 232, 240);
-    doc.setFillColor(248, 250, 252); // extremely soft slate
-    doc.roundedRect(14, agreementsY, 182, 11, 2, 2, "FD");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.setTextColor(15, 23, 42); // slate-900 (ultra high-contrast dark slate)
-    doc.text("GEREGISTREERDE PRIJSAFPRAKEN OPDRACHTGEVER:", 18, agreementsY + 7.2);
-
+    let currentY = 94;
     const prUitlezen = activeClient?.priceUitlezen;
     const unitUitlezen = activeClient?.unitUitlezen || "€";
     const prUitlijnen = activeClient?.priceUitlijnen;
@@ -2506,41 +2497,132 @@ export default function App() {
     const prPortierfolie = activeClient?.pricePortierfolie;
     const prDempingsmatten = activeClient?.priceDempingsmatten;
 
-    let agreementsParts = [];
-    if (prUitlezen) agreementsParts.push(`OBD: ${unitUitlezen === "Ae" ? `${prUitlezen} Ae` : `€${Number(prUitlezen).toFixed(2)}`}`);
-    if (prUitlijnen) agreementsParts.push(`Uitlijnen: €${Number(prUitlijnen).toFixed(2)}`);
-    if (prKoelvloeistof) agreementsParts.push(`Koelvloeistof: €${Number(prKoelvloeistof).toFixed(2)}`);
-    if (prAntiroest) agreementsParts.push(`Antiroest: €${Number(prAntiroest).toFixed(2)}`);
-    if (prPortierfolie) agreementsParts.push(`Portierfolie: €${Number(prPortierfolie).toFixed(2)}`);
-    if (prDempingsmatten) agreementsParts.push(`Dempingsmatten: €${Number(prDempingsmatten).toFixed(2)}`);
-    if (agreementsParts.length === 0) agreementsParts.push("Geen vaste prijsafspraken geregistreerd");
+    let agreementsList = [];
+    if (prUitlezen) agreementsList.push({ label: "OBD (Uitlezen)", value: unitUitlezen === "Ae" ? `${prUitlezen} Ae` : `EUR ${Number(prUitlezen).toFixed(2)}` });
+    if (prUitlijnen) agreementsList.push({ label: "Uitlijnen", value: `EUR ${Number(prUitlijnen).toFixed(2)}` });
+    if (prKoelvloeistof) agreementsList.push({ label: "Koelvloeistof", value: `EUR ${Number(prKoelvloeistof).toFixed(2)}` });
+    if (prAntiroest) agreementsList.push({ label: "Antiroest", value: `EUR ${Number(prAntiroest).toFixed(2)}` });
+    if (prPortierfolie) agreementsList.push({ label: "Portierfolie", value: `EUR ${Number(prPortierfolie).toFixed(2)}` });
+    if (prDempingsmatten) agreementsList.push({ label: "Dempingsmatten", value: `EUR ${Number(prDempingsmatten).toFixed(2)}` });
 
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(30, 41, 59); // slate-800
-    doc.setFontSize(6.8); // Slightly smaller font to fit all possible 6 items
-    doc.text(agreementsParts.join("   |   "), 93, agreementsY + 7.2);
+    // Calculate dynamic Height for Agreements card
+    let agreementsHeight = 12;
+    if (agreementsList.length > 0) {
+      agreementsHeight = agreementsList.length <= 3 ? 22 : 30;
+    }
 
-    // Checklist diagnostics panel
-    let diagnosticY = 109;
     doc.setDrawColor(226, 232, 240);
-    doc.setFillColor(248, 250, 252); // extrêmement soft slate background
-    doc.roundedRect(14, diagnosticY, 182, 11, 2, 2, "FD");
+    doc.setFillColor(248, 250, 252); // extremely soft slate background
+    doc.roundedRect(14, currentY, 182, agreementsHeight, 2, 2, "FD");
 
+    // Print agreements header
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(15, 23, 42); // slate-900 (ultra high-contrast dark slate)
-    doc.text("DIAGNOSTISCHE EXTRAS & VERREKENINGEN:", 18, diagnosticY + 7.2);
+    
+    const clientNameString = activeClient ? activeClient.name.toUpperCase() : "GEEN SPECIFIEKE";
+    doc.text(`GEREGISTREERDE PRIJSAFPRAKEN (OPDRACHTGEVER: ${clientNameString})`, 18, currentY + 6.5);
+
+    if (agreementsList.length === 0) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.2);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text("Geen vaste prijsafspraken van toepassing voor deze opdrachtgever", 18, currentY + 11.5);
+    } else {
+      // Draw a subtle horizontal divider line using light border color
+      doc.setDrawColor(234, 242, 248); 
+      doc.setLineWidth(0.25);
+      doc.line(14, currentY + 9, 196, currentY + 9);
+
+      // Render grid items
+      agreementsList.forEach((item, index) => {
+        const col = index % 3;
+        const row = Math.floor(index / 3);
+        const itemX = 18 + col * 60;
+        const itemY = currentY + 14.2 + row * 7.5;
+
+        // Small bullet point marker indicator square
+        doc.setFillColor(brandRgb.r, brandRgb.g, brandRgb.b);
+        doc.roundedRect(itemX, itemY - 2.0, 1.4, 1.4, 0.3, 0.3, "F");
+
+        // Label
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(71, 85, 105); // slate-600
+        doc.text(item.label + ":", itemX + 3.0, itemY - 0.7);
+
+        // Value in bold emerald text for visual pleasantry and approved contrast match!
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(5, 150, 105); // emerald-700 for top contrast
+        const labelWidth = doc.getTextWidth(item.label + ":");
+        doc.text(item.value, itemX + 3.0 + labelWidth + 1.2, itemY - 0.7);
+      });
+    }
+
+    // Dynamic Checklist diagnostics panel positioning
+    let diagnosticY = currentY + agreementsHeight + 4;
 
     const checkListItems = [];
     if (readoutPre) checkListItems.push("Diagnose VOOR: OK");
     if (readoutPost) checkListItems.push("Diagnose NA: OK");
     if (alignmentStatus !== 'none') checkListItems.push(`Uitlijnen: ${alignmentStatus === 'intern' ? 'Interne post' : 'Externe post'}`);
     if (calibrationStatus !== 'none') checkListItems.push(`ADAS: ${calibrationStatus === 'intern' ? 'Interne post' : 'Externe post'}`);
-    if (checkListItems.length === 0) checkListItems.push("Geen extra checklist-posten verwerkt");
+
+    let diagnosticHeight = 12;
+    if (checkListItems.length > 0) {
+      diagnosticHeight = checkListItems.length <= 3 ? 22 : 30;
+    }
+
+    doc.setDrawColor(226, 232, 240);
+    doc.setFillColor(248, 250, 252); // extremely soft slate background
+    doc.roundedRect(14, diagnosticY, 182, diagnosticHeight, 2, 2, "FD");
 
     doc.setFont("helvetica", "bold");
-    doc.setTextColor(5, 150, 105); // emerald-700 (premium deep emerald green for solid contrast)
-    doc.text(checkListItems.join("  |  "), 93, diagnosticY + 7.2);
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42); // slate-900 (ultra high-contrast dark slate)
+    doc.text("EXTRAS & CALCULATIE CHECKLIST DIAGNOSTIEK:", 18, diagnosticY + 6.5);
+
+    if (checkListItems.length === 0) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.2);
+      doc.setTextColor(100, 116, 139); // slate-500
+      doc.text("Geen extra diagnostische posten of checklist-verrekeningen geactiveerd", 18, diagnosticY + 11.5);
+    } else {
+      // Draw a subtle horizontal divider line
+      doc.setDrawColor(234, 242, 248);
+      doc.setLineWidth(0.25);
+      doc.line(14, diagnosticY + 9, 196, diagnosticY + 9);
+
+      // Render grid items
+      checkListItems.forEach((itemStr, index) => {
+        const col = index % 3;
+        const row = Math.floor(index / 3);
+        const itemX = 18 + col * 60;
+        const itemY = diagnosticY + 14.2 + row * 7.5;
+
+        // Small emerald indicator square
+        doc.setFillColor(16, 185, 129); // premium emerald green
+        doc.roundedRect(itemX, itemY - 2.0, 1.4, 1.4, 0.3, 0.3, "F");
+
+        const parts = itemStr.split(": ");
+        const itemLabel = parts[0];
+        const itemVal = parts[1] || "";
+
+        // Label
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(7);
+        doc.setTextColor(71, 85, 105); // slate-600
+        doc.text(itemLabel + (itemVal ? ":" : ""), itemX + 3.0, itemY - 0.7);
+
+        // Value
+        if (itemVal) {
+          doc.setFont("helvetica", "bold");
+          doc.setTextColor(5, 150, 105); // emerald-700
+          const labelWidth = doc.getTextWidth(itemLabel + ":");
+          doc.text(itemVal, itemX + 3.0 + labelWidth + 1.2, itemY - 0.7);
+        }
+      });
+    }
 
     // Reset general font settings
     doc.setTextColor(0);
@@ -2548,14 +2630,14 @@ export default function App() {
 
     // Table
     const scannedCodes = scanAudatexCodes(calcInput);
-    let tableStartY = 125;
+    let tableStartY = diagnosticY + diagnosticHeight + 6;
     if (scannedCodes.length > 0) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(100, 116, 139);
       const codeStrList = scannedCodes.slice(0, 5).map(c => `${c.code}: ${c.description}`).join(', ');
-      doc.text(`Gedetecteerde Audatex Codes: ${scannedCodes.length > 5 ? `${codeStrList}...` : codeStrList}`, 14, 125);
-      tableStartY = 129;
+      doc.text(`Gedetecteerde Audatex Codes: ${scannedCodes.length > 5 ? `${codeStrList}...` : codeStrList}`, 14, tableStartY);
+      tableStartY += 4;
     }
 
     const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
