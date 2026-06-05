@@ -2635,9 +2635,18 @@ export default function App() {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7.5);
       doc.setTextColor(100, 116, 139);
-      const codeStrList = scannedCodes.slice(0, 5).map(c => `${c.code}: ${c.description}`).join(', ');
-      doc.text(`Gedetecteerde Audatex Codes: ${scannedCodes.length > 5 ? `${codeStrList}...` : codeStrList}`, 14, tableStartY);
-      tableStartY += 4;
+      
+      const fullCodeStr = scannedCodes.map(c => `${c.code}: ${c.description}`).join(', ');
+      const textToWrap = `Gedetecteerde Audatex Codes: ${fullCodeStr}`;
+      
+      // Let's split text to width of 182mm (which is the main printable area width)
+      const lines = doc.splitTextToSize(textToWrap, 182);
+      
+      lines.forEach((line: string) => {
+        doc.text(line, 14, tableStartY);
+        tableStartY += 3.8; // beautiful line height
+      });
+      tableStartY += 2.2; // premium spacing before the autoTable starts
     }
 
     const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
