@@ -2141,34 +2141,6 @@ export default function App() {
     return combinedResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
   }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides, clientPrices, selectedClientId, clients]);
 
-  const unmatchedInvoiceParts = useMemo(() => {
-    if (invoiceParts.length === 0) return [];
-    
-    const combined = [...calculationParts, ...manualParts];
-    const matchedInvoiceIds = new Set<string>();
-
-    combined.forEach(calcPart => {
-      const normalizedCalc = normalizePartNumber(calcPart.partNumber);
-      
-      // Find matches by part number
-      const match = invoiceParts.find(invPart => 
-        normalizePartNumber(invPart.partNumber) === normalizedCalc
-      );
-
-      // If no part number match, try semantic description match
-      const semanticMatch = !match ? invoiceParts.find(invPart => 
-        descriptionsMatch(calcPart.description, invPart.description)
-      ) : null;
-
-      const realMatch = match || semanticMatch;
-      if (realMatch && realMatch.id) {
-        matchedInvoiceIds.add(realMatch.id);
-      }
-    });
-
-    return invoiceParts.filter(invPart => !matchedInvoiceIds.has(invPart.id));
-  }, [invoiceParts, calculationParts, manualParts]);
-
   const stats = useMemo(() => {
     const matched = results.filter(r => r.status === 'matched').length;
     const deviations = results.filter(r => r.status === 'deviation').length;
@@ -2284,22 +2256,6 @@ export default function App() {
       price: 0
     };
     setManualParts(prev => [...prev, newPart]);
-  };
-
-  const addManualPartFromInvoice = (invPart: any) => {
-    const newPart: AutomotivePart = {
-      id: `MAN-${Date.now()}`,
-      description: invPart.description,
-      partNumber: invPart.partNumber || "00000000",
-      price: invPart.price || 0,
-      quantity: invPart.quantity || 1
-    };
-    setManualParts(prev => [...prev, newPart]);
-    if (typeof playCyberBeep === 'function') {
-      playCyberBeep();
-    }
-    setToastMsg(`Onderdeel "${invPart.description}" toegevoegd aan de calculatie!`);
-    setTimeout(() => setToastMsg(null), 3000);
   };
 
   const updateManualPart = (id: string, field: keyof AutomotivePart, value: any) => {
@@ -2821,62 +2777,6 @@ export default function App() {
         }
       }
     });
-
-    // Draw Unmatched Invoice Parts box if there are any
-    if (unmatchedInvoiceParts.length > 0) {
-      let finalY = (doc as any).lastAutoTable.finalY + 10;
-      
-      const unmatchedHeightNeeded = 18 + (unmatchedInvoiceParts.length * 6.5);
-      const pageHeight = doc.internal.pageSize.height;
-      if (finalY + unmatchedHeightNeeded > pageHeight - 15) {
-        doc.addPage();
-        finalY = 18;
-      }
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
-      doc.setTextColor(30, 41, 59); // Dark Slate
-      doc.text("Extra Onderdelen op Inkoopfactuur (Niet in Eindcalculatie)", 14, finalY);
-      
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(100, 116, 139); // Slate-500
-      doc.text("Deze onderdelen stonden op de inkoopfactuur, maar ontbreken in de eindcalculatie.", 14, finalY + 4);
-      
-      const unmatchedTableData = unmatchedInvoiceParts.map(u => [
-        u.description,
-        u.partNumber || '—',
-        u.quantity ? `${u.quantity}x` : '1x',
-        `EUR ${u.price.toFixed(2)}`
-      ]);
-      
-      autoTable(doc, {
-        startY: finalY + 6,
-        head: [['Omschrijving (Factuur)', 'Partnummer', 'Aantal', 'Prijs']],
-        body: unmatchedTableData,
-        headStyles: {
-          fillColor: [71, 85, 105], // Slate-600
-          textColor: 255,
-          fontSize: 7.5,
-          fontStyle: 'bold',
-          cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 }
-        },
-        bodyStyles: {
-          fontSize: 7.0,
-          textColor: [71, 85, 105],
-          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 }
-        },
-        alternateRowStyles: {
-          fillColor: [248, 250, 252]
-        },
-        columnStyles: {
-          0: { cellWidth: 90 },
-          1: { cellWidth: 44 },
-          2: { cellWidth: 16, halign: 'center' },
-          3: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
-        }
-      });
-    }
 
     // Footer with branded subtitle & page numbers
     const pageCount = (doc.internal as any).getNumberOfPages();
@@ -4507,80 +4407,6 @@ export default function App() {
                 </table>
               </div>
             </div>
-
-            {/* Unmatched Invoice Parts Section */}
-            {unmatchedInvoiceParts.length > 0 && (
-              <div id="unmatched-invoice-parts-container" className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden mt-6">
-                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                      <Layers size={20} />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold leading-none text-slate-900">Extra Regels op Inkoopfactuur (Niet in eindcalculatie)</h3>
-                      <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
-                        {unmatchedInvoiceParts.length} Onderdelen niet in eindcalculatie gevonden
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-450 max-w-md md:text-right font-medium leading-relaxed">
-                    Deze onderdelen stonden wél op de inkoopfactuur, maar ontbreken in de eindcalculatie. Voeg ze hieronder eenvoudig toe.
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50/30 text-slate-500 font-bold uppercase tracking-widest text-[10px] border-b border-slate-100">
-                        <th className="px-6 py-4">Onderdeel (Factuur)</th>
-                        <th className="px-6 py-4">Partnummer</th>
-                        <th className="px-6 py-4 text-center">Aantal</th>
-                        <th className="px-6 py-4 text-right">Prijs Factuur</th>
-                        <th className="px-6 py-4 text-center w-28">Actie</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {unmatchedInvoiceParts.map((invPart) => (
-                        <tr 
-                          key={invPart.id} 
-                          className="hover:bg-slate-50/50 transition-colors"
-                        >
-                          <td className="px-6 py-4">
-                            <span className="font-semibold text-sm text-slate-800">
-                              {invPart.description}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <code className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[11.5px] font-mono border border-slate-200">
-                              {invPart.partNumber || "Geen partnummer"}
-                            </code>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
-                              {invPart.quantity || 1}x
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-right font-black text-slate-900 text-sm">
-                            € {(invPart.price || 0).toFixed(2)}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <button
-                              id={`add-unmatched-${invPart.id}`}
-                              onClick={() => addManualPartFromInvoice(invPart)}
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1 mx-auto cursor-pointer"
-                              title="Voeg regel toe als handmatige calculatieregel"
-                            >
-                              <Plus size={14} />
-                              <span>Toevoegen</span>
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </>
         ) : userProfile?.role === "admin" ? (
           <div className="space-y-6">
