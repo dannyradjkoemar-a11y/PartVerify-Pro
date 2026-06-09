@@ -2001,7 +2001,12 @@ export default function App() {
   };
 
   const calculationParts = useMemo(() => parseCalculation(calcInput), [calcInput]);
-  const invoiceParts = useMemo(() => parseInvoice(invoiceInput), [invoiceInput]);
+  const invoiceParts = useMemo(() => {
+    return parseInvoice(invoiceInput).map((p, idx) => ({
+      ...p,
+      id: p.id || `INV-${idx}`
+    }));
+  }, [invoiceInput]);
 
   const results = useMemo(() => {
     if (calculationParts.length === 0 && manualParts.length === 0) return [];
