@@ -1061,7 +1061,7 @@ export default function App() {
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
   const [dimUnchanged, setDimUnchanged] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing' | 'unmatched_invoice'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing'>('all');
 
   // OPTION 2: Dossier Geschiedenis & Toasts
   const [savedDossiers, setSavedDossiers] = useState<any[]>([]);
@@ -2127,56 +2127,63 @@ export default function App() {
       };
     });
 
-    const unmatchedInvoiceParts = invoiceParts.filter(invPart => !matchedInvoiceIds.has(invPart.id));
+    const combinedResults = allResults;
 
-    const unmatchedResults = unmatchedInvoiceParts.map(invPart => {
-      return {
-        calc: {
-          id: `FACT-${invPart.id}`.substring(0, 16), // ensure ID fits nicely
-          description: invPart.description,
-          partNumber: invPart.partNumber || "Geen partnummer",
-          price: 0,
-          quantity: invPart.quantity || 1
-        },
-        match: invPart,
-        status: 'unmatched_invoice' as const,
-        priceDiff: invPart.price,
-        isSemantic: false,
-        manualPrice: undefined
-      };
-    });
-
-    const combinedResults = [...allResults, ...unmatchedResults];
-
-    // Custom sorting: OK -> Deviation -> Missing -> Approved (Manual) -> Extra on Invoice -> Removed
+    // Custom sorting: OK -> Deviation -> Missing -> Approved (Manual) -> Removed
     const statusOrder = {
       'matched': 0,
       'deviation': 1,
       'missing': 2,
       'approved': 3,
-      'unmatched_invoice': 4,
-      'removed': 5
+      'removed': 4
     };
 
     return combinedResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
   }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides, clientPrices, selectedClientId, clients]);
+
+  const unmatchedInvoiceParts = useMemo(() => {
+    if (invoiceParts.length === 0) return [];
+    
+    const combined = [...calculationParts, ...manualParts];
+    const matchedInvoiceIds = new Set<string>();
+
+    combined.forEach(calcPart => {
+      const normalizedCalc = normalizePartNumber(calcPart.partNumber);
+      
+      // Find matches by part number
+      const match = invoiceParts.find(invPart => 
+        normalizePartNumber(invPart.partNumber) === normalizedCalc
+      );
+
+      // If no part number match, try semantic description match
+      const semanticMatch = !match ? invoiceParts.find(invPart => 
+        descriptionsMatch(calcPart.description, invPart.description)
+      ) : null;
+
+      const realMatch = match || semanticMatch;
+      if (realMatch && realMatch.id) {
+        matchedInvoiceIds.add(realMatch.id);
+      }
+    });
+
+    return invoiceParts.filter(invPart => !matchedInvoiceIds.has(invPart.id));
+  }, [invoiceParts, calculationParts, manualParts]);
 
   const stats = useMemo(() => {
     const matched = results.filter(r => r.status === 'matched').length;
     const deviations = results.filter(r => r.status === 'deviation').length;
     const missing = results.filter(r => r.status === 'missing').length;
     const approved = results.filter(r => r.status === 'approved').length;
-    const extraInvoice = results.filter(r => r.status === 'unmatched_invoice').length;
     const totalPriceDiff = results
       .filter(r => r.status !== 'removed')
       .reduce((acc, r) => acc + r.priceDiff, 0);
     
-    // Sum of all "good" prices: manual overrides OR invoice matches (excluding item missing or extra invoice parts)
+    // Sum of all "good" prices: manual overrides OR invoice matches
     const totalVerifiedAmount = results
-      .filter(r => r.status !== 'removed' && r.status !== 'missing' && r.status !== 'unmatched_invoice')
+      .filter(r => r.status !== 'removed' && r.status !== 'missing')
       .reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? 0), 0);
 
-    return { matched, deviations, missing, approved, extraInvoice, totalPriceDiff, totalVerifiedAmount };
+    return { matched, deviations, missing, approved, totalPriceDiff, totalVerifiedAmount };
   }, [results]);
 
   const calibrationData = useMemo(() => {
@@ -2292,7 +2299,7 @@ export default function App() {
       playCyberBeep();
     }
     setToastMsg(`Onderdeel "${invPart.description}" toegevoegd aan de calculatie!`);
-    setTimeout(() => setToastMsg(null), 3500);
+    setTimeout(() => setToastMsg(null), 3000);
   };
 
   const updateManualPart = (id: string, field: keyof AutomotivePart, value: any) => {
@@ -2687,36 +2694,18 @@ export default function App() {
     }
 
     const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
-    const tableData = visibleInPdf.map(res => {
-      let statusLabel = 'ONTBREEKT';
-      if (res.status === 'matched') statusLabel = 'OK';
-      else if (res.status === 'approved') statusLabel = 'GEWIJZIGD';
-      else if (res.status === 'deviation') statusLabel = 'AFWIJKING';
-      else if (res.status === 'removed') statusLabel = 'VERWIJDERD';
-      else if (res.status === 'unmatched_invoice') statusLabel = 'EXTRA INK.';
-
-      const posVal = res.status === 'unmatched_invoice' ? 'FACT' : res.calc.id;
-      const calcPriceLabel = res.status === 'unmatched_invoice' ? '—' : `EUR ${res.calc.price.toFixed(2)}`;
-      
-      const invoicePriceLabel = res.status === 'approved' 
-        ? `EUR ${res.manualPrice?.toFixed(2)}*` 
-        : (res.match ? `EUR ${res.match.price.toFixed(2)}` : '—');
-
-      const prefixSign = res.priceDiff > 0 ? '+' : '';
-      const diffLabel = res.status === 'unmatched_invoice' 
-        ? `+${res.priceDiff.toFixed(2)}` 
-        : (res.priceDiff !== 0 ? prefixSign + res.priceDiff.toFixed(2) : '—');
-
-      return [
-        statusLabel,
-        posVal,
-        res.calc.description,
-        res.calc.partNumber,
-        calcPriceLabel,
-        invoicePriceLabel,
-        diffLabel
-      ];
-    });
+    const tableData = visibleInPdf.map(res => [
+      res.status === 'matched' ? 'OK' : 
+      res.status === 'approved' ? 'GEWIJZIGD' :
+      res.status === 'deviation' ? 'AFWIJKING' : 
+      res.status === 'removed' ? 'VERWIJDERD' : 'ONTBREEKT',
+      res.calc.id,
+      res.calc.description,
+      res.calc.partNumber,
+      `EUR ${res.calc.price.toFixed(2)}`,
+      res.status === 'approved' ? `EUR ${res.manualPrice?.toFixed(2)}*` : (res.match ? `EUR ${res.match.price.toFixed(2)}` : '—'),
+      res.priceDiff !== 0 ? (res.priceDiff > 0 ? '+' : '') + res.priceDiff.toFixed(2) : '—'
+    ]);
 
     autoTable(doc, {
       startY: tableStartY,
@@ -2756,8 +2745,6 @@ export default function App() {
             data.cell.styles.fillColor = [254, 244, 244]; // extremely soft ruby background
           } else if (item.status === 'missing') {
             data.cell.styles.fillColor = [255, 241, 242]; // soft reddish pink
-          } else if (item.status === 'unmatched_invoice') {
-            data.cell.styles.fillColor = [240, 244, 255]; // soft indigo background for unmatched invoice parts
           }
 
           // Column specific visual styles for high-fidelity text-colors
@@ -2773,20 +2760,13 @@ export default function App() {
               data.cell.styles.textColor = [244, 63, 94]; // Rose 500
             } else if (item.status === 'removed') {
               data.cell.styles.textColor = [148, 163, 184]; // Slate 400
-            } else if (item.status === 'unmatched_invoice') {
-              data.cell.styles.textColor = [79, 70, 229]; // Indigo 600
             }
           }
 
           // Position highlight for high priority items
-          if (data.column.index === 1) {
-            if (item.status === 'deviation') {
-              data.cell.styles.textColor = [15, 23, 42]; // dark slate
-              data.cell.styles.fontStyle = 'bold';
-            } else if (item.status === 'unmatched_invoice') {
-              data.cell.styles.textColor = [79, 70, 229]; // Indigo 600
-              data.cell.styles.fontStyle = 'bold';
-            }
+          if (data.column.index === 1 && item.status === 'deviation') {
+            data.cell.styles.textColor = [15, 23, 42]; // dark slate
+            data.cell.styles.fontStyle = 'bold';
           }
 
           // Calc price striker column or colors
@@ -2799,8 +2779,6 @@ export default function App() {
             if (item.status === 'deviation') {
               data.cell.styles.textColor = [16, 185, 129]; // Clean emerald highlight for approved overrides
               data.cell.styles.fillColor = [236, 253, 245]; // soft emerald background for verified price
-            } else if (item.status === 'unmatched_invoice') {
-              data.cell.styles.textColor = [79, 70, 229]; // Indigo 600
             } else {
               const valText = data.cell.text[0] || "";
               const val = parseFloat(valText.replace('EUR ', '').replace('+', ''));
@@ -2810,9 +2788,7 @@ export default function App() {
 
           // Difference price highlights
           if (data.column.index === 6) {
-            if (item.status === 'unmatched_invoice') {
-              data.cell.styles.textColor = [79, 70, 229]; // Indigo 605
-            } else if (item.priceDiff > 0) {
+            if (item.priceDiff > 0) {
               data.cell.styles.textColor = [225, 29, 72]; // Higher cost matches warning rose
             } else if (item.priceDiff < 0) {
               data.cell.styles.textColor = [16, 185, 129]; // Savings green
@@ -2845,6 +2821,62 @@ export default function App() {
         }
       }
     });
+
+    // Draw Unmatched Invoice Parts box if there are any
+    if (unmatchedInvoiceParts.length > 0) {
+      let finalY = (doc as any).lastAutoTable.finalY + 10;
+      
+      const unmatchedHeightNeeded = 18 + (unmatchedInvoiceParts.length * 6.5);
+      const pageHeight = doc.internal.pageSize.height;
+      if (finalY + unmatchedHeightNeeded > pageHeight - 15) {
+        doc.addPage();
+        finalY = 18;
+      }
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(30, 41, 59); // Dark Slate
+      doc.text("Extra Onderdelen op Inkoopfactuur (Niet in Eindcalculatie)", 14, finalY);
+      
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(100, 116, 139); // Slate-500
+      doc.text("Deze onderdelen stonden op de inkoopfactuur, maar ontbreken in de eindcalculatie.", 14, finalY + 4);
+      
+      const unmatchedTableData = unmatchedInvoiceParts.map(u => [
+        u.description,
+        u.partNumber || '—',
+        u.quantity ? `${u.quantity}x` : '1x',
+        `EUR ${u.price.toFixed(2)}`
+      ]);
+      
+      autoTable(doc, {
+        startY: finalY + 6,
+        head: [['Omschrijving (Factuur)', 'Partnummer', 'Aantal', 'Prijs']],
+        body: unmatchedTableData,
+        headStyles: {
+          fillColor: [71, 85, 105], // Slate-600
+          textColor: 255,
+          fontSize: 7.5,
+          fontStyle: 'bold',
+          cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 }
+        },
+        bodyStyles: {
+          fontSize: 7.0,
+          textColor: [71, 85, 105],
+          cellPadding: { top: 2, bottom: 2, left: 3, right: 3 }
+        },
+        alternateRowStyles: {
+          fillColor: [248, 250, 252]
+        },
+        columnStyles: {
+          0: { cellWidth: 90 },
+          1: { cellWidth: 44 },
+          2: { cellWidth: 16, halign: 'center' },
+          3: { cellWidth: 32, halign: 'right', fontStyle: 'bold' }
+        }
+      });
+    }
 
     // Footer with branded subtitle & page numbers
     const pageCount = (doc.internal as any).getNumberOfPages();
@@ -3972,18 +4004,6 @@ export default function App() {
                 <p className="text-[9px] font-black text-rose-600 uppercase tracking-wider">Ontbrekend</p>
                 <p className="text-lg font-black text-rose-700">{stats.missing}</p>
               </button>
-
-              {/* Extra op Factuur */}
-              <button 
-                type="button"
-                onClick={() => setStatusFilter(statusFilter === 'unmatched_invoice' ? 'all' : 'unmatched_invoice')}
-                className={`p-3 rounded-2xl border text-left flex flex-col justify-center transition-all select-none active:scale-98 min-h-[72px] ${
-                  statusFilter === 'unmatched_invoice' ? 'border-indigo-500 bg-indigo-50 shadow-sm ring-2 ring-indigo-100' : 'border-slate-100 bg-slate-50 hover:bg-indigo-50/10'
-                }`}
-              >
-                <p className="text-[9px] font-black text-indigo-600 uppercase tracking-wider">Extra op Factuur</p>
-                <p className="text-lg font-black text-indigo-700">{stats.extraInvoice}</p>
-              </button>
             </div>
 
 
@@ -4042,13 +4062,7 @@ export default function App() {
                             className="inline-flex items-center gap-1 text-[8px] font-black uppercase tracking-wider bg-orange-50 text-orange-600 px-2 py-0.5 rounded cursor-pointer hover:bg-orange-100 transition-colors border border-orange-100/50"
                             title="Filter wissen"
                           >
-                            <span>Filter: {
-                              statusFilter === 'matched' ? 'Match OK' : 
-                              statusFilter === 'approved' ? 'Handmatig' : 
-                              statusFilter === 'deviation' ? 'Afwijking' : 
-                              statusFilter === 'unmatched_invoice' ? 'Extra op Factuur' :
-                              'Ontbrekend'
-                            }</span>
+                            <span>Filter: {statusFilter === 'matched' ? 'Match OK' : statusFilter === 'approved' ? 'Handmatig' : statusFilter === 'deviation' ? 'Afwijking' : 'Ontbrekend'}</span>
                             <span className="font-mono text-[9px]">×</span>
                           </span>
                         )}
@@ -4204,11 +4218,6 @@ export default function App() {
                                   <Trash2 size={16} />
                                   VERWIJDERD
                                 </div>
-                              ) : res.status === 'unmatched_invoice' ? (
-                                <div className="flex items-center gap-2 text-indigo-600">
-                                  <Layers size={16} />
-                                  EXTRA FACTUUR
-                                </div>
                               ) : (
                                 <div className="flex items-center gap-2 text-rose-500">
                                   <XCircle size={16} />
@@ -4232,10 +4241,6 @@ export default function App() {
                               ) : res.status === 'removed' ? (
                                 <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-405 border border-slate-200 line-through font-mono">
                                   {res.calc.id}
-                                </span>
-                              ) : res.status === 'unmatched_invoice' ? (
-                                <span className="inline-flex items-center justify-center font-bold text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
-                                  FACT
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-rose-50 text-rose-600 border border-rose-200">
@@ -4272,17 +4277,12 @@ export default function App() {
                                       {res.calc.quantity}x
                                     </span>
                                   )}
-                                  <span className={res.status === 'unmatched_invoice' ? 'text-indigo-900 font-black' : ''}>{res.calc.description}</span>
+                                  <span>{res.calc.description}</span>
                                 </div>
                               )}
                               {res.isSemantic && (
                                 <span className="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium mt-1 inline-block">
                                   Semantische Match
-                                </span>
-                              )}
-                              {res.status === 'unmatched_invoice' && (
-                                <span className="text-[9.5px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-black mt-1 inline-block border border-indigo-150 shadow-sm animate-pulse">
-                                  Enkel op inkoopfactuur aanwezig (Klik op 'Toevoegen' om over te nemen)
                                 </span>
                               )}
                             </td>
@@ -4328,11 +4328,7 @@ export default function App() {
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-2 group/price-cell font-sans">
-                                  {res.status === 'unmatched_invoice' ? (
-                                    <span className="text-xs font-semibold text-slate-400 italic">
-                                      Niet in calculatie
-                                    </span>
-                                  ) : res.status === 'deviation' ? (
+                                  {res.status === 'deviation' ? (
                                     <div className="flex flex-col">
                                       <span className="text-slate-400 line-through decoration-rose-500 decoration-2 text-sm font-black">
                                         € {res.calc.price.toFixed(2)}
@@ -4405,38 +4401,13 @@ export default function App() {
                                      <RefreshCw size={12} />
                                    </button>
                                  </div>
-                               ) : res.status === 'unmatched_invoice' ? (
-                                 <div 
-                                   onClick={() => addManualPartFromInvoice(res.match)}
-                                   className="p-1.5 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/70 cursor-pointer transition-all shadow-sm flex flex-col gap-1 text-left"
-                                   title="Klik om dit onderdeel toe te voegen aan de calculatie"
-                                 >
-                                   <div className="flex items-center gap-1 mb-1 flex-wrap">
-                                     <span className="text-[8.5px] font-black tracking-wider px-1.5 py-0.5 rounded bg-indigo-600 text-white border border-indigo-500 shadow-sm leading-none">
-                                        FACTUUR
-                                      </span>
-                                     <span className="text-indigo-900 text-xs font-bold truncate max-w-[150px]" title={res.match.description}>
-                                       {res.match.description}
-                                     </span>
-                                   </div>
-                                   <div className="flex items-center gap-2">
-                                     <span className="font-extrabold text-xs text-indigo-700">
-                                       € {res.match.price.toFixed(2)}
-                                     </span>
-                                     {res.match.partNumber && (
-                                       <code className="text-[9.5px] font-mono text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-150 whitespace-nowrap">
-                                          {res.match.partNumber}
-                                       </code>
-                                     )}
-                                   </div>
-                                 </div>
                                ) : res.match ? (
                                  <div 
                                    onClick={() => handleManualOverride(res.calc.id, res.calc.partNumber)}
                                    className={`p-1.5 rounded-xl border cursor-pointer transition-all shadow-sm ${
-                                      res.status === 'matched' 
-                                        ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
-                                        : 'bg-rose-50 border-rose-200 hover:bg-rose-100'
+                                     res.status === 'matched' 
+                                       ? 'bg-emerald-50 border-emerald-200 hover:bg-emerald-100' 
+                                       : 'bg-rose-50 border-rose-200 hover:bg-rose-100'
                                    }`}
                                  >
                                    <div className="flex items-center gap-1 mb-1 flex-wrap">
@@ -4499,30 +4470,19 @@ export default function App() {
                                )}
                              </td>
                             <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
-                              {res.status === 'unmatched_invoice' ? (
-                                <button 
-                                  onClick={() => addManualPartFromInvoice(res.match)}
-                                  className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all font-sans font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm ring-1 ring-indigo-300/30"
-                                  title="Toevoegen aan calculatie"
-                                >
-                                  <Plus size={16} />
-                                  <span className="text-[10px] uppercase font-black tracking-wider pr-1">Neem over</span>
-                                </button>
-                              ) : (
-                                <button 
-                                  onClick={() => {
-                                    if (res.calc.id.startsWith('MAN-')) {
-                                      setManualParts(prev => prev.filter(p => p.id !== res.calc.id));
-                                    } else {
-                                      toggleRemovePart(res.calc.id);
-                                    }
-                                  }}
-                                  className={`p-2 rounded-lg transition-all ${res.status === 'removed' ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-200' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
-                                  title={res.status === 'removed' ? "Herstellen" : "Verwijderen"}
-                                >
-                                  {res.status === 'removed' ? <RefreshCw size={18} className="animate-spin-slow" /> : <Trash2 size={18} />}
-                                </button>
-                              )}
+                              <button 
+                                onClick={() => {
+                                  if (res.calc.id.startsWith('MAN-')) {
+                                    setManualParts(prev => prev.filter(p => p.id !== res.calc.id));
+                                  } else {
+                                    toggleRemovePart(res.calc.id);
+                                  }
+                                }}
+                                className={`p-2 rounded-lg transition-all ${res.status === 'removed' ? 'bg-amber-100 text-amber-600 ring-2 ring-amber-200' : 'text-slate-400 hover:text-rose-500 hover:bg-rose-50'}`}
+                                title={res.status === 'removed' ? "Herstellen" : "Verwijderen"}
+                              >
+                                {res.status === 'removed' ? <RefreshCw size={18} className="animate-spin-slow" /> : <Trash2 size={18} />}
+                              </button>
                             </td>
                           </motion.tr>
                         );
@@ -4547,6 +4507,80 @@ export default function App() {
                 </table>
               </div>
             </div>
+
+            {/* Unmatched Invoice Parts Section */}
+            {unmatchedInvoiceParts.length > 0 && (
+              <div id="unmatched-invoice-parts-container" className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden mt-6">
+                <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-50/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                      <Layers size={20} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold leading-none text-slate-900">Extra Regels op Inkoopfactuur (Niet in eindcalculatie)</h3>
+                      <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">
+                        {unmatchedInvoiceParts.length} Onderdelen niet in eindcalculatie gevonden
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-450 max-w-md md:text-right font-medium leading-relaxed">
+                    Deze onderdelen stonden wél op de inkoopfactuur, maar ontbreken in de eindcalculatie. Voeg ze hieronder eenvoudig toe.
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/30 text-slate-500 font-bold uppercase tracking-widest text-[10px] border-b border-slate-100">
+                        <th className="px-6 py-4">Onderdeel (Factuur)</th>
+                        <th className="px-6 py-4">Partnummer</th>
+                        <th className="px-6 py-4 text-center">Aantal</th>
+                        <th className="px-6 py-4 text-right">Prijs Factuur</th>
+                        <th className="px-6 py-4 text-center w-28">Actie</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {unmatchedInvoiceParts.map((invPart) => (
+                        <tr 
+                          key={invPart.id} 
+                          className="hover:bg-slate-50/50 transition-colors"
+                        >
+                          <td className="px-6 py-4">
+                            <span className="font-semibold text-sm text-slate-800">
+                              {invPart.description}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <code className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[11.5px] font-mono border border-slate-200">
+                              {invPart.partNumber || "Geen partnummer"}
+                            </code>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100">
+                              {invPart.quantity || 1}x
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right font-black text-slate-900 text-sm">
+                            € {(invPart.price || 0).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <button
+                              id={`add-unmatched-${invPart.id}`}
+                              onClick={() => addManualPartFromInvoice(invPart)}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                              title="Voeg regel toe als handmatige calculatieregel"
+                            >
+                              <Plus size={14} />
+                              <span>Toevoegen</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         ) : userProfile?.role === "admin" ? (
           <div className="space-y-6">
@@ -5205,74 +5239,6 @@ function SettingsView({ isTfaEnabled, tfaSecret, onSetupTfa, onConfirmTfa, onDis
                 )}
               </div>
             )}
-          </div>
-        </div>
-      </div>
-
-      {/* Checkpoints & Rollback Overview */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden p-8">
-        <div className="flex items-start gap-6">
-          <div className="w-12 h-12 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-600">
-            <Layers size={28} />
-          </div>
-          <div className="flex-1 space-y-6">
-            <div>
-              <h3 className="text-lg font-bold">Back-up Beheer & Herstelpunten</h3>
-              <p className="text-slate-500 text-sm mt-1">
-                PartVerify Pro houdt automatisch back-ups en stabiele release-checkpoints bij van uw favoriete weergaven.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="p-4 bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-150 rounded-2xl transition-all">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-sm text-emerald-800">
-                    Systeemfase C: Geïntegreerd Verslag (Huidig Actief)
-                  </span>
-                  <span className="px-2 py-0.5 bg-emerald-600 text-white rounded-md text-[9px] font-black uppercase tracking-widest leading-none">
-                    Actief weergave
-                  </span>
-                </div>
-                <p className="text-xs text-emerald-700">
-                  Niet-herkende inkoopregels worden in een herkenbare indigo weergave direct in het hoofdverslag getoond, zodat u direct via de actie-knop ("Neem over") de regel aan de calculatie kunt toevoegen.
-                </p>
-              </div>
-
-              <div className="p-4 bg-slate-55 hover:bg-slate-50 border border-slate-200 rounded-2xl transition-all relative">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-sm text-slate-700">
-                    Systeemfase B: Apart Overzicht (Weergave 2026-06-09)
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-bold font-mono">
-                    `App_backup_with_separate_box.tsx`
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Toont de resterende/niet-gematchte onderdelen van uw inkoopfactuur in een afzonderlijk vakje onderaan uw verificatieverslag om het verslag zelf clean te houden.
-                </p>
-              </div>
-
-              <div className="p-4 bg-slate-55 hover:bg-slate-50 border border-slate-200 rounded-2xl transition-all relative">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="font-bold text-sm text-slate-700">
-                    Systeemfase A: Vertrouwd Herstelpunt (Norm)
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-bold font-mono">
-                    `App_backup_before_unmatched_invoice_parts_20260609.tsx`
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500">
-                  Het geverifieerde en door u vertrouwde basis productiemodel van PartVerify Pro (`norm_mei_2026.tsx`). Dit omvat uitsluitend onderdelen matching en prijsvergelijking op basis van calculatieregels.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl text-xs text-blue-700 flex flex-col gap-1.5 leading-relaxed">
-              <span className="font-bold">💡 Hoe herstel ik een back-up?</span>
-              <span>
-                Al onze back-up bestanden zijn 1-op-1 direct uitwisselbare broncodes in uw projectmap. Mocht u op enig moment willen wisselen, dan kunt u de bijbehorende back-up bestanden hernoemen naar <code className="bg-white/80 border border-blue-200 px-1 py-0.5 rounded font-mono text-[10px]">src/App.tsx</code>. Uw configuratie, database, en twee-staps verificatie (2FA) blijven daarbij te allen tijde volledig behouden!
-              </span>
-            </div>
           </div>
         </div>
       </div>
