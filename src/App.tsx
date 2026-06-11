@@ -2704,7 +2704,7 @@ export default function App() {
       tableStartY += 2.2; // premium spacing before the autoTable starts
     }
 
-    const visibleInPdf = showRemoved ? results : results.filter(r => r.status !== 'removed');
+    const visibleInPdf = results.filter(r => r.status !== 'removed');
     const tableData = visibleInPdf.map(res => {
       let statusLabel = 'ONTBREEKT';
       if (res.status === 'matched') statusLabel = 'OK';
