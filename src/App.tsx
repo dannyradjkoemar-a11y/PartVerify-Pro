@@ -1058,6 +1058,7 @@ export default function App() {
   const [vehicleError, setVehicleError] = useState<string | null>(null);
   const [showRdwModal, setShowRdwModal] = useState<boolean>(false);
   const [removedPartIds, setRemovedPartIds] = useState<Set<string>>(new Set());
+  const [dismissedInvoicePartIds, setDismissedInvoicePartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
   const [dimUnchanged, setDimUnchanged] = useState(false);
@@ -1283,6 +1284,7 @@ export default function App() {
       manualOverrides,
       manualParts,
       removedPartIds: Array.from(removedPartIds),
+      dismissedInvoicePartIds: Array.from(dismissedInvoicePartIds),
       struckThroughIds: Array.from(struckThroughIds),
       redPriceStruckThroughIds: Array.from(redPriceStruckThroughIds),
       stats,
@@ -1340,6 +1342,7 @@ export default function App() {
     setManualOverrides(dossier.manualOverrides || {});
     setManualParts(dossier.manualParts || []);
     setRemovedPartIds(new Set(dossier.removedPartIds || []));
+    setDismissedInvoicePartIds(new Set(dossier.dismissedInvoicePartIds || []));
     setStruckThroughIds(new Set(dossier.struckThroughIds || []));
     setRedPriceStruckThroughIds(new Set(dossier.redPriceStruckThroughIds || []));
 
@@ -2135,6 +2138,7 @@ export default function App() {
     const unmatchedInvoiceParts = invoiceParts.filter(invPart => !matchedInvoiceIds.has(invPart.id));
 
     const unmatchedResults = unmatchedInvoiceParts.map(invPart => {
+      const isDismissed = dismissedInvoicePartIds.has(invPart.id);
       return {
         calc: {
           id: `FACT-${invPart.id}`.substring(0, 16), // ensure ID fits nicely
@@ -2144,7 +2148,7 @@ export default function App() {
           quantity: invPart.quantity || 1
         },
         match: invPart,
-        status: 'unmatched_invoice' as const,
+        status: isDismissed ? ('removed' as const) : ('unmatched_invoice' as const),
         priceDiff: invPart.price,
         isSemantic: false,
         manualPrice: undefined
@@ -2164,7 +2168,7 @@ export default function App() {
     };
 
     return combinedResults.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
-  }, [calculationParts, manualParts, removedPartIds, invoiceParts, manualOverrides, clientPrices, selectedClientId, clients]);
+  }, [calculationParts, manualParts, removedPartIds, dismissedInvoicePartIds, invoiceParts, manualOverrides, clientPrices, selectedClientId, clients]);
 
   const stats = useMemo(() => {
     const matched = results.filter(r => r.status === 'matched').length;
@@ -2270,6 +2274,15 @@ export default function App() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleDismissInvoicePart = (invPartId: string) => {
+    setDismissedInvoicePartIds(prev => {
+      const next = new Set(prev);
+      if (next.has(invPartId)) next.delete(invPartId);
+      else next.add(invPartId);
       return next;
     });
   };
@@ -4078,6 +4091,51 @@ export default function App() {
                       <Plus size={16} />
                       Regel Toevoegen
                     </button>
+
+                    {stats.extraInvoice > 0 && (
+                      <button 
+                        onClick={() => {
+                          const unmatchedParts = results.filter(r => r.status === 'unmatched_invoice');
+                          setDismissedInvoicePartIds(prev => {
+                            const next = new Set(prev);
+                            unmatchedParts.forEach(r => {
+                              if (r.match && r.match.id) {
+                                next.add(r.match.id);
+                              }
+                            });
+                            return next;
+                          });
+                          if (typeof playCyberBeep === 'function') {
+                            playCyberBeep(700, 0.1, "sawtooth");
+                          }
+                          setToastMsg(`${unmatchedParts.length} extra factuurregels genegeerd en verborgen!`);
+                          setTimeout(() => setToastMsg(null), 3500);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95 font-sans cursor-pointer"
+                        title="Alle extra factuurregels in één keer negeren/verbergen"
+                      >
+                        <Trash2 size={16} className="text-indigo-500 shrink-0" />
+                        <span>Extra's Wissen</span>
+                      </button>
+                    )}
+
+                    {dismissedInvoicePartIds.size > 0 && (
+                      <button 
+                        onClick={() => {
+                          setDismissedInvoicePartIds(new Set());
+                          if (typeof playCyberBeep === 'function') {
+                            playCyberBeep(850, 0.08, "sine");
+                          }
+                          setToastMsg(`Alle genegeerde factuurregels hersteld!`);
+                          setTimeout(() => setToastMsg(null), 3500);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200 text-xs font-bold rounded-xl transition-all shadow-sm active:scale-95 font-sans cursor-pointer"
+                        title="Herstel alle genegeerde extra factuurregels"
+                      >
+                        <RefreshCw size={14} className="text-slate-500 shrink-0" />
+                        <span>Extra's Herstellen</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -4236,7 +4294,7 @@ export default function App() {
                                 </span>
                               ) : res.status === 'removed' ? (
                                 <span className="inline-flex items-center justify-center font-bold text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-405 border border-slate-200 line-through font-mono">
-                                  {res.calc.id}
+                                  {res.calc.id.startsWith('FACT-') ? 'FACT' : res.calc.id}
                                 </span>
                               ) : res.status === 'unmatched_invoice' ? (
                                 <span className="inline-flex items-center justify-center font-bold text-[10px] px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
@@ -4500,24 +4558,49 @@ export default function App() {
                                       {res.calc.id}
                                     </span>
                                    <span>+ Prijs invullen</span>
-                                 </div>
-                               )}
-                             </td>
-                            <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 text-right flex items-center justify-end gap-1">
                               {res.status === 'unmatched_invoice' ? (
-                                <button 
-                                  onClick={() => addManualPartFromInvoice(res.match)}
-                                  className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all font-sans font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm ring-1 ring-indigo-300/30"
-                                  title="Toevoegen aan calculatie"
-                                >
-                                  <Plus size={16} />
-                                  <span className="text-[10px] uppercase font-black tracking-wider pr-1">Neem over</span>
-                                </button>
+                                <div className="flex items-center gap-1">
+                                  <button 
+                                    onClick={() => addManualPartFromInvoice(res.match)}
+                                    className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-700 transition-all font-sans font-bold flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow-sm ring-1 ring-indigo-300/30"
+                                    title="Toevoegen aan calculatie"
+                                  >
+                                    <Plus size={16} />
+                                    <span className="text-[10px] uppercase font-black tracking-wider pr-1">Neem over</span>
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      if (res.match && res.match.id) {
+                                        toggleDismissInvoicePart(res.match.id);
+                                        if (typeof playCyberBeep === 'function') {
+                                          playCyberBeep(700, 0.1, "sawtooth");
+                                        }
+                                        setToastMsg(`Extra factuurregel "${res.match.description}" genegeerd!`);
+                                        setTimeout(() => setToastMsg(null), 3500);
+                                      }
+                                    }}
+                                    className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all cursor-pointer"
+                                    title="Verwijderen / Negeren uit overzicht"
+                                  >
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
                               ) : (
                                 <button 
                                   onClick={() => {
                                     if (res.calc.id.startsWith('MAN-')) {
                                       setManualParts(prev => prev.filter(p => p.id !== res.calc.id));
+                                    } else if (res.calc.id.startsWith('FACT-')) {
+                                      const invId = res.match?.id;
+                                      if (invId) {
+                                        toggleDismissInvoicePart(invId);
+                                        setToastMsg(`Extra factuurregel "${res.match?.description}" hersteld!`);
+                                        setTimeout(() => setToastMsg(null), 3000);
+                                      }
                                     } else {
                                       toggleRemovePart(res.calc.id);
                                     }
@@ -4528,6 +4611,7 @@ export default function App() {
                                   {res.status === 'removed' ? <RefreshCw size={18} className="animate-spin-slow" /> : <Trash2 size={18} />}
                                 </button>
                               )}
+
                             </td>
                           </motion.tr>
                         );
