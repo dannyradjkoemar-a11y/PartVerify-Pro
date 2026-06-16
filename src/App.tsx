@@ -1061,6 +1061,7 @@ export default function App() {
   const [dismissedInvoicePartIds, setDismissedInvoicePartIds] = useState<Set<string>>(new Set());
   const [manualParts, setManualParts] = useState<AutomotivePart[]>([]);
   const [showRemoved, setShowRemoved] = useState(true);
+  const [hideExtraInvoiceParts, setHideExtraInvoiceParts] = useState(false);
   const [dimUnchanged, setDimUnchanged] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing' | 'unmatched_invoice'>('all');
 
@@ -2201,6 +2202,9 @@ export default function App() {
     if (!showRemoved) {
       base = base.filter(r => r.status !== 'removed');
     }
+    if (hideExtraInvoiceParts) {
+      base = base.filter(r => r.status !== 'unmatched_invoice');
+    }
     if (statusFilter !== 'all') {
       base = base.filter(r => r.status === statusFilter);
     }
@@ -2213,7 +2217,7 @@ export default function App() {
       r.calc.id.includes(q) ||
       (r.match?.description.toLowerCase().includes(q))
     );
-  }, [results, searchQuery, showRemoved, statusFilter]);
+  }, [results, searchQuery, showRemoved, hideExtraInvoiceParts, statusFilter]);
 
   const handleResetAll = () => {
     setCalcInput("");
@@ -4167,6 +4171,22 @@ export default function App() {
                       <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors uppercase tracking-tight flex items-center gap-1.5">
                         <span>Correcte delen verdonkeren</span>
                         <span className="px-1.5 py-0.5 text-[8px] font-black bg-blue-50 text-blue-605 rounded uppercase tracking-wider">Focus</span>
+                      </span>
+                    </label>
+
+                    <label className="flex items-center gap-2 cursor-pointer group">
+                      <div className="relative inline-flex items-center">
+                        <input 
+                          type="checkbox" 
+                          checked={hideExtraInvoiceParts} 
+                          onChange={(e) => setHideExtraInvoiceParts(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                      <span className="text-[11px] font-bold text-slate-500 group-hover:text-slate-700 transition-colors uppercase tracking-tight flex items-center gap-1.5">
+                        <span>Extra's tijdelijk verbergen</span>
+                        <span className="px-1.5 py-0.5 text-[8px] font-black bg-indigo-50 text-indigo-700 rounded uppercase tracking-wider">Factuur</span>
                       </span>
                     </label>
                   </div>
