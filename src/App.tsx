@@ -2016,20 +2016,92 @@ export default function App() {
     if (calculationParts.length === 0 && manualParts.length === 0) return [];
 
     const combined = [...calculationParts, ...manualParts];
-    const matchedInvoiceIds = new Set<string>();
+    const claimedInvoiceIds = new Set<string>();
+    const matchMap = new Map<string, { match: any; isSemantic: boolean }>();
+
+    // Pass 1: Strict Part Number Prefix matching (ignoring suffix code like paint/color GRU or 9B9)
+    combined.forEach(calcPart => {
+      const normCalc = normalizePartNumber(calcPart.partNumber);
+      if (!normCalc || normCalc === "00000500" || normCalc === "00000000") return;
+
+      const found = invoiceParts.find(invPart => {
+        if (claimedInvoiceIds.has(invPart.id)) return false;
+        const normInv = normalizePartNumber(invPart.partNumber || "");
+        if (!normInv) return false;
+
+        // Matches if identical, or if one is at least 7 characters and prefix of the other (standard automotive suffix variation)
+        const isMatch = normCalc === normInv || 
+          (normCalc.length >= 7 && normInv.startsWith(normCalc)) || 
+          (normInv.length >= 7 && normCalc.startsWith(normInv));
+        return isMatch;
+      });
+
+      if (found) {
+        claimedInvoiceIds.add(found.id);
+        matchMap.set(calcPart.id, { match: found, isSemantic: false });
+      }
+    });
+
+    // Pass 2: Strict Semantic Synonym/Description matching
+    combined.forEach(calcPart => {
+      if (matchMap.has(calcPart.id)) return; // already matched in Pass 1
+
+      const found = invoiceParts.find(invPart => {
+        if (claimedInvoiceIds.has(invPart.id)) return false;
+        
+        // Match descriptions semantically
+        return descriptionsMatch(calcPart.description, invPart.description);
+      });
+
+      if (found) {
+        claimedInvoiceIds.add(found.id);
+        matchMap.set(calcPart.id, { match: found, isSemantic: true });
+      }
+    });
+
+    // Pass 3: Broad matching (part number listed in description, or significant word overlaps)
+    combined.forEach(calcPart => {
+      if (matchMap.has(calcPart.id)) return; // already matched
+
+      const calcLower = calcPart.description.toLowerCase();
+      const normCalc = normalizePartNumber(calcPart.partNumber);
+
+      const found = invoiceParts.find(invPart => {
+        if (claimedInvoiceIds.has(invPart.id)) return false;
+
+        const invLower = invPart.description.toLowerCase();
+        const normInv = normalizePartNumber(invPart.partNumber || "");
+
+        if (normCalc && normCalc.length >= 6) {
+          if (invLower.includes(normCalc.toLowerCase())) return true;
+        }
+        if (normInv && normInv.length >= 6) {
+          if (calcLower.includes(normInv.toLowerCase())) return true;
+        }
+
+        // Substring / word overlap fallback for descriptions
+        const wordsCalc = calcLower.split(/[\s,.\-_/]+/).filter(w => w.length > 3);
+        const wordsInv = invLower.split(/[\s,.\-_/]+/).filter(w => w.length > 3);
+        if (wordsCalc.length > 1 && wordsInv.length > 1) {
+          const intersection = wordsCalc.filter(w => wordsInv.includes(w));
+          if (intersection.length >= Math.min(wordsCalc.length, wordsInv.length, 2)) {
+            return true;
+          }
+        }
+
+        return false;
+      });
+
+      if (found) {
+        claimedInvoiceIds.add(found.id);
+        matchMap.set(calcPart.id, { match: found, isSemantic: true });
+      }
+    });
 
     const allResults = combined.map(calcPart => {
-      const normalizedCalc = normalizePartNumber(calcPart.partNumber);
-      
-      // Find matches by part number
-      const match = invoiceParts.find(invPart => 
-        normalizePartNumber(invPart.partNumber) === normalizedCalc
-      );
-
-      // If no part number match, try semantic description match
-      const semanticMatch = !match ? invoiceParts.find(invPart => 
-        descriptionsMatch(calcPart.description, invPart.description)
-      ) : null;
+      const matchResult = matchMap.get(calcPart.id);
+      const match = matchResult && !matchResult.isSemantic ? matchResult.match : null;
+      const semanticMatch = matchResult && matchResult.isSemantic ? matchResult.match : null;
 
       const calcLower = calcPart.description.toLowerCase();
       const calcPartNoClean = calcPart.partNumber.replace(/[^A-Z0-9]/gi, "").toUpperCase();
@@ -2095,12 +2167,6 @@ export default function App() {
 
       const finalMatch = match || semanticMatch || virtualClientMatch;
 
-      // Track matched invoice parts
-      const realMatch = match || semanticMatch;
-      if (realMatch && realMatch.id) {
-        matchedInvoiceIds.add(realMatch.id);
-      }
-
       const overrideKey = `${calcPart.id}-${calcPart.partNumber}`;
       const manualPrice = manualOverrides[overrideKey];
 
@@ -2136,7 +2202,7 @@ export default function App() {
       };
     });
 
-    const unmatchedInvoiceParts = invoiceParts.filter(invPart => !matchedInvoiceIds.has(invPart.id));
+    const unmatchedInvoiceParts = invoiceParts.filter(invPart => !claimedInvoiceIds.has(invPart.id));
 
     const unmatchedResults = unmatchedInvoiceParts.map(invPart => {
       const isDismissed = dismissedInvoicePartIds.has(invPart.id);
