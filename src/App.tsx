@@ -2720,8 +2720,8 @@ export default function App() {
       const posVal = res.status === 'unmatched_invoice' ? 'FACT' : res.calc.id;
       const calcPriceLabel = res.status === 'unmatched_invoice' ? '—' : `EUR ${res.calc.price.toFixed(2)}`;
       
-      const invoicePriceLabel = res.status === 'approved' 
-        ? `EUR ${res.manualPrice?.toFixed(2)}*` 
+      const invoicePriceLabel = res.manualPrice !== undefined 
+        ? `EUR ${res.manualPrice.toFixed(2)}*` 
         : (res.match ? `EUR ${res.match.price.toFixed(2)}` : '—');
 
       const prefixSign = res.priceDiff > 0 ? '+' : '';
