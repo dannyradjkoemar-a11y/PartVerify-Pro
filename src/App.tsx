@@ -57,6 +57,7 @@ import {
   parseCalculation, 
   parseInvoice, 
   normalizePartNumber, 
+  extractBasePartNumbers,
   AutomotivePart,
   descriptionsMatch,
   formatCalculationText,
@@ -2019,15 +2020,36 @@ export default function App() {
     const claimedInvoiceIds = new Set<string>();
     const matchMap = new Map<string, { match: any; isSemantic: boolean }>();
 
-    // Pass 1: Strict Part Number Prefix matching (ignoring suffix code like paint/color GRU or 9B9)
+    // Pass 1: High-precision base part number matching (using extracted 9-digit physical part numbers from description/partNumber)
     combined.forEach(calcPart => {
+      const calcBases = extractBasePartNumbers(calcPart.description, calcPart.partNumber);
+      if (calcBases.length === 0) return;
+
+      // Find an invoice part that shares any extracted base part number
+      const found = invoiceParts.find(invPart => {
+        if (claimedInvoiceIds.has(invPart.id)) return false;
+        const invBases = extractBasePartNumbers(invPart.description, invPart.partNumber || "");
+        return calcBases.some(b => invBases.includes(b));
+      });
+
+      if (found) {
+        claimedInvoiceIds.add(found.id);
+        matchMap.set(calcPart.id, { match: found, isSemantic: false });
+      }
+    });
+
+    // Pass 2: Strict Part Number Prefix matching (for actual long part numbers of length > 4)
+    combined.forEach(calcPart => {
+      if (matchMap.has(calcPart.id)) return;
+
       const normCalc = normalizePartNumber(calcPart.partNumber);
-      if (!normCalc || normCalc === "00000500" || normCalc === "00000000") return;
+      // Skip short codes like "9B9", "GRU" to avoid false matches on color codes
+      if (!normCalc || normCalc === "00000500" || normCalc === "00000000" || normCalc.length <= 4) return;
 
       const found = invoiceParts.find(invPart => {
         if (claimedInvoiceIds.has(invPart.id)) return false;
         const normInv = normalizePartNumber(invPart.partNumber || "");
-        if (!normInv) return false;
+        if (!normInv || normInv.length <= 4) return false;
 
         // Matches if identical, or if one is at least 7 characters and prefix of the other (standard automotive suffix variation)
         const isMatch = normCalc === normInv || 
@@ -2042,31 +2064,34 @@ export default function App() {
       }
     });
 
-    // Pass 2: Strict Semantic Synonym/Description matching
+    // Pass 3: Strict Semantic Synonym/Description matching (prioritizing closest price to avoid mismatches of duplicates)
     combined.forEach(calcPart => {
-      if (matchMap.has(calcPart.id)) return; // already matched in Pass 1
+      if (matchMap.has(calcPart.id)) return; // already matched
 
-      const found = invoiceParts.find(invPart => {
+      // Find all possible semantic candidates
+      const candidates = invoiceParts.filter(invPart => {
         if (claimedInvoiceIds.has(invPart.id)) return false;
-        
-        // Match descriptions semantically
         return descriptionsMatch(calcPart.description, invPart.description);
       });
 
-      if (found) {
-        claimedInvoiceIds.add(found.id);
-        matchMap.set(calcPart.id, { match: found, isSemantic: true });
+      if (candidates.length > 0) {
+        // Sort candidates by price difference relative to calculation price, closest price first
+        candidates.sort((a, b) => Math.abs(a.price - calcPart.price) - Math.abs(b.price - calcPart.price));
+        const bestMatch = candidates[0];
+
+        claimedInvoiceIds.add(bestMatch.id);
+        matchMap.set(calcPart.id, { match: bestMatch, isSemantic: true });
       }
     });
 
-    // Pass 3: Broad matching (part number listed in description, or significant word overlaps)
+    // Pass 4: Broad matching / Substring & Word overlap fallback (prioritizing closest price)
     combined.forEach(calcPart => {
       if (matchMap.has(calcPart.id)) return; // already matched
 
       const calcLower = calcPart.description.toLowerCase();
       const normCalc = normalizePartNumber(calcPart.partNumber);
 
-      const found = invoiceParts.find(invPart => {
+      const candidates = invoiceParts.filter(invPart => {
         if (claimedInvoiceIds.has(invPart.id)) return false;
 
         const invLower = invPart.description.toLowerCase();
@@ -2092,9 +2117,13 @@ export default function App() {
         return false;
       });
 
-      if (found) {
-        claimedInvoiceIds.add(found.id);
-        matchMap.set(calcPart.id, { match: found, isSemantic: true });
+      if (candidates.length > 0) {
+        // Sort candidates by price difference relative to calculation price
+        candidates.sort((a, b) => Math.abs(a.price - calcPart.price) - Math.abs(b.price - calcPart.price));
+        const bestMatch = candidates[0];
+
+        claimedInvoiceIds.add(bestMatch.id);
+        matchMap.set(calcPart.id, { match: bestMatch, isSemantic: true });
       }
     });
 

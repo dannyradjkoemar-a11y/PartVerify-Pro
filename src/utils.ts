@@ -10,6 +10,32 @@ export const normalizePartNumber = (part: string): string => {
   return part.replace(/[\s,.\-_/]/g, '').toUpperCase();
 };
 
+export const extractBasePartNumbers = (description: string, partNumber: string): string[] => {
+  const combined = `${partNumber} ${description}`.toUpperCase();
+  // Standard VAG part numbers are like "2G7 805 903 B" or "2G7805903b"
+  // Let's find sequences of 3 alphanumeric, 3 digits, and 3 alphanumeric
+  const regex = /\b([A-Z0-9]{3})[\s\-_]*([0-9]{3})[\s\-_]*([A-Z0-9]{3})\b/gi;
+  const matches = [...combined.matchAll(regex)];
+  const extracted = matches.map(m => `${m[1]}${m[2]}${m[3]}`.toUpperCase());
+
+  // Also support matching entire single tokens consisting of letters and digits of length 8-12 that contain at least 3 digits
+  const tokens = combined.split(/[\s,.\-_/]+/).filter(Boolean);
+  for (const token of tokens) {
+    const cleanToken = token.replace(/[^A-Z0-9]/gi, "");
+    if (cleanToken.length >= 8 && cleanToken.length <= 12) {
+      const hasEnoughDigits = (cleanToken.match(/[0-9]/g) || []).length >= 3;
+      if (hasEnoughDigits) {
+        const base9 = cleanToken.substring(0, 9);
+        if (!extracted.includes(base9)) {
+          extracted.push(base9);
+        }
+      }
+    }
+  }
+
+  return extracted;
+};
+
 export interface AutomotivePart {
   id: string;
   description: string;
