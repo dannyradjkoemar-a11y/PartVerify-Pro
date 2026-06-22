@@ -1064,7 +1064,6 @@ export default function App() {
   const [showRemoved, setShowRemoved] = useState(true);
   const [hideExtraInvoiceParts, setHideExtraInvoiceParts] = useState(false);
   const [dimUnchanged, setDimUnchanged] = useState(false);
-  const [showDiffAnalysis, setShowDiffAnalysis] = useState(false);
   const [statusFilter, setStatusFilter] = useState<'all' | 'matched' | 'approved' | 'deviation' | 'missing' | 'unmatched_invoice'>('all');
 
   // OPTION 2: Dossier Geschiedenis & Toasts
@@ -2120,37 +2119,6 @@ export default function App() {
 
       if (candidates.length > 0) {
         // Sort candidates by price difference relative to calculation price
-        candidates.sort((a, b) => Math.abs(a.price - calcPart.price) - Math.abs(b.price - calcPart.price));
-        const bestMatch = candidates[0];
-
-        claimedInvoiceIds.add(bestMatch.id);
-        matchMap.set(calcPart.id, { match: bestMatch, isSemantic: true });
-      }
-    });
-
-    // Pass 5: Exact or Near Price + Single significant word match (highly robust fallback for duplicates/suffixes)
-    combined.forEach(calcPart => {
-      if (matchMap.has(calcPart.id)) return; // already matched
-
-      const calcLower = calcPart.description.toLowerCase();
-      const calcWords = calcLower.split(/[\s,.\-_/]+/).filter(w => w.length >= 4);
-
-      const candidates = invoiceParts.filter(invPart => {
-        if (claimedInvoiceIds.has(invPart.id)) return false;
-
-        // Check if price is extremely close (difference < 0.05)
-        const priceMatch = Math.abs(invPart.price - calcPart.price) < 0.05;
-        if (!priceMatch) return false;
-
-        const invLower = invPart.description.toLowerCase();
-        const invWords = invLower.split(/[\s,.\-_/]+/).filter(w => w.length >= 4);
-
-        // Share at least one word of length >= 4 (e.g. "voorspoiler", "bumper", "scherm")
-        return calcWords.some(w => invWords.includes(w));
-      });
-
-      if (candidates.length > 0) {
-        // Take the closest candidate
         candidates.sort((a, b) => Math.abs(a.price - calcPart.price) - Math.abs(b.price - calcPart.price));
         const bestMatch = candidates[0];
 
@@ -3337,9 +3305,7 @@ export default function App() {
           {(() => {
             const activeResults = results.filter(r => r.status !== 'removed');
             const totalOriginalCalc = activeResults.reduce((acc, r) => acc + r.calc.price, 0);
-            
-            // True actual total of invoices (and manual adjustments), which accounts for missing as €0.00
-            const totalInvoices = activeResults.reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? 0), 0);
+            const totalInvoices = activeResults.reduce((acc, r) => acc + (r.manualPrice ?? r.match?.price ?? r.calc.price), 0);
             const realTimeDiff = totalInvoices - totalOriginalCalc;
             const hasData = activeResults.length > 0;
 
@@ -3351,274 +3317,74 @@ export default function App() {
               );
             }
 
-            // Group deviations for the "Verschil Verklikker" explanation
-            const deviations = activeResults.filter(r => (r.status === 'deviation' || r.status === 'approved') && Math.abs((r.manualPrice ?? r.match?.price ?? r.calc.price) - r.calc.price) > 0.005);
-            const extraParts = activeResults.filter(r => r.status === 'unmatched_invoice');
-            const missingParts = activeResults.filter(r => r.status === 'missing');
-
-            // Find match suggestions for unmatched pairs (same price and shares word, or same name of length >=4)
-            const matchSuggestions: { calc: any; inv: any }[] = [];
-            missingParts.forEach(m => {
-              extraParts.forEach(e => {
-                const samePrice = Math.abs(m.calc.price - e.match.price) < 1.0; // close price
-                const mDesc = m.calc.description.toLowerCase();
-                const eDesc = e.match.description.toLowerCase();
-                const mWords = mDesc.split(/[\s,.\-_/]+/).filter(w => w.length >= 4);
-                const eWords = eDesc.split(/[\s,.\-_/]+/).filter(w => w.length >= 4);
-                const hasSharedWord = mWords.some(w => eWords.includes(w));
-                if (samePrice || hasSharedWord) {
-                  matchSuggestions.push({ calc: m.calc, inv: e.match });
-                }
-              });
-            });
-
             return (
-              <div className="flex flex-col gap-3">
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.98 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center shadow-xs"
-                >
-                  {/* original calc */}
-                  <div className="flex flex-col text-left">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
-                      Totaal Voorcalculatie
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-slate-50/50 border border-slate-200/50 rounded-2xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center shadow-xs"
+              >
+                {/* original calc */}
+                <div className="flex flex-col text-left">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
+                    Totaal Voorcalculatie
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-sm font-black text-slate-800">
+                      € {totalOriginalCalc.toFixed(2)}
                     </span>
-                    <div className="flex items-baseline gap-1.5 mt-0.5">
-                      <span className="text-sm font-black text-slate-800">
-                        € {totalOriginalCalc.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">({activeResults.filter(r => r.status !== 'unmatched_invoice').length} {activeResults.filter(r => r.status !== 'unmatched_invoice').length === 1 ? 'regel' : 'regels'})</span>
-                    </div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">({activeResults.length} {activeResults.length === 1 ? 'regel' : 'regels'})</span>
                   </div>
-
-                  {/* matched invoices / overrides */}
-                  <div className="flex flex-col text-left border-t md:border-t-0 md:border-x border-slate-100 pt-3 md:pt-0 md:px-4">
-                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
-                      Totaal Inkoop / Tarieven
-                    </span>
-                    <div className="flex items-baseline gap-1.5 mt-0.5 animate-pulse-slow">
-                      <span className="text-sm font-black text-blue-600">
-                        € {totalInvoices.toFixed(2)}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                        ({activeResults.filter(r => r.match || r.manualPrice !== undefined).length} geverifieerd)
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* live difference */}
-                  <div className="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-3 md:pt-0">
-                    <div className="text-left md:text-right">
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 block">
-                        Financieel Verschil (Netto)
-                      </span>
-                      <span className={`text-base font-black tracking-tight ${
-                        realTimeDiff < -0.005 
-                          ? 'text-emerald-600' 
-                          : realTimeDiff > 0.005 
-                          ? 'text-rose-600 font-extrabold' 
-                          : 'text-slate-500'
-                      }`}>
-                        {realTimeDiff < -0.005 ? '-' : realTimeDiff > 0.005 ? '+' : ''}€ {Math.abs(realTimeDiff).toFixed(2)}
-                      </span>
-                    </div>
-
-                    <div className={`p-2 rounded-xl shrink-0 ${
-                      realTimeDiff < -0.005 
-                        ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' 
-                        : realTimeDiff > 0.005 
-                        ? 'bg-rose-50 border border-rose-100 text-rose-600 animate-pulse' 
-                        : 'bg-slate-100 border border-slate-200 text-slate-400'
-                    }`}>
-                      {realTimeDiff < -0.005 ? (
-                        <CheckCircle2 size={16} />
-                      ) : realTimeDiff > 0.005 ? (
-                        <AlertCircle size={16} />
-                      ) : (
-                        <Check size={16} />
-                      )}
-                    </div>
-                  </div>
-                </motion.div>
-
-                {/* Real-time Verschil Verklikker Detail Widget (Sleek, Compact, Cent-precieze) */}
-                <div className="mt-1 transition-all">
-                  {Math.abs(realTimeDiff) < 0.005 ? (
-                    <div className="bg-emerald-50/70 border border-emerald-100/50 rounded-xl px-4 py-2.5 text-[11px] flex items-center gap-2 text-emerald-800 shadow-2xs">
-                      <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                      <span className="font-semibold">✓ Geweldig! De bedragen van de voorcalculatie en de inkoopfactuur sluiten <strong>op de cent nauwkeurig</strong> op elkaar aan (€ 0,00 verschil).</span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-2.5">
-                      <div className="bg-amber-50/60 border border-amber-200/60 rounded-xl px-4 py-2.5 text-xs flex flex-wrap items-center justify-between gap-3 shadow-2xs">
-                        <div className="flex items-center gap-2 text-amber-800 font-medium select-none">
-                          <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
-                          <span>Detail-afwijkingen gedetecteerd: er is een verschil van <strong className="font-extrabold text-rose-700">€ {Math.abs(realTimeDiff).toFixed(2)}</strong>.</span>
-                        </div>
-                        <button
-                          onClick={() => setShowDiffAnalysis(!showDiffAnalysis)}
-                          className="text-[10px] font-black text-amber-700 hover:text-amber-805 bg-amber-100/70 hover:bg-amber-100 px-3 py-1 rounded-full transition-all uppercase tracking-wider cursor-pointer"
-                        >
-                          {showDiffAnalysis ? "Verbergen" : "Bekijk welke onderdelen (Real-time)"}
-                        </button>
-                      </div>
-
-                      {showDiffAnalysis && (
-                        <motion.div 
-                          initial={{ opacity: 0, y: -4 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-white border border-slate-200 rounded-2xl p-4.5 shadow-sm text-xs space-y-3.5"
-                        >
-                          <div className="border-b border-slate-100 pb-2">
-                            <h4 className="font-extrabold text-[11px] text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
-                              <span>🔍 Cent-precieze Verschilwijzer</span>
-                              <span className="text-[10px] font-normal text-slate-400 lowercase italic">(klik op een onderdeel om direct te filteren in de tabel)</span>
-                            </h4>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            {/* Prijsafwijkingen */}
-                            <div className="bg-slate-50/40 p-3 rounded-xl border border-slate-100 flex flex-col gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-extrabold text-[10px] text-amber-700 uppercase tracking-wider">⚠️ Prijsafwijkingen</span>
-                                <span className="bg-amber-105 text-amber-800 px-1.5 py-0.2 rounded text-[9px] font-black">{deviations.length}</span>
-                              </div>
-                              {deviations.length === 0 ? (
-                                <p className="text-[10px] text-slate-400 italic py-1">Geen prijsverschillen op gematchte regels.</p>
-                              ) : (
-                                <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-1">
-                                  {deviations.map((r, idx) => {
-                                    const diff = (r.manualPrice ?? r.match?.price ?? 0) - r.calc.price;
-                                    return (
-                                      <button 
-                                        type="button"
-                                        key={idx} 
-                                        onClick={() => {
-                                          setSearchQuery(r.calc.id);
-                                          setToastMsg(`Gefilterd op positie: ${r.calc.id}`);
-                                          setTimeout(() => setToastMsg(null), 2500);
-                                        }}
-                                        className="bg-white p-2 rounded-lg border border-slate-200/70 hover:border-blue-400 hover:bg-blue-50/25 transition-all text-left shadow-2xs group flex flex-col gap-0.5 cursor-pointer w-full"
-                                        title="Klik om dit onderdeel te zoeken"
-                                      >
-                                        <div className="font-extrabold text-slate-850 truncate group-hover:text-blue-750 flex items-center justify-between gap-1 w-full">
-                                          <span className="truncate">{r.calc.description}</span>
-                                          <span className="font-mono text-[9px] bg-slate-100 px-1.5 py-0.2 rounded text-slate-500 shrink-0">Pos {r.calc.id}</span>
-                                        </div>
-                                        <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500 pt-1 border-t border-slate-50 font-medium">
-                                          <span>Calc: € {r.calc.price.toFixed(2)}</span>
-                                          <span>Fact: € {(r.manualPrice ?? r.match?.price ?? 0).toFixed(2)}</span>
-                                        </div>
-                                        <div className="text-right text-[10px] font-black mt-0.5 leading-none">
-                                          <span className={diff > 0 ? 'text-rose-600' : 'text-emerald-605'}>
-                                            {diff > 0 ? '+' : ''}€ {diff.toFixed(2)}
-                                          </span>
-                                        </div>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Extra op Factuur */}
-                            <div className="bg-slate-50/40 p-3 rounded-xl border border-slate-100 flex flex-col gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-extrabold text-[10px] text-indigo-705 uppercase tracking-wider">➕ Extra op Factuur</span>
-                                <span className="bg-indigo-100 text-indigo-800 px-1.5 py-0.2 rounded text-[9px] font-black">{extraParts.length}</span>
-                              </div>
-                              {extraParts.length === 0 ? (
-                                <p className="text-[10px] text-slate-400 italic py-1">Geen niet-gematchte factuurregels.</p>
-                              ) : (
-                                <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-1">
-                                  {extraParts.map((r, idx) => (
-                                    <button 
-                                      type="button"
-                                      key={idx} 
-                                      onClick={() => {
-                                        setSearchQuery(r.match.description);
-                                        setToastMsg(`Gefilterd op: ${r.match.description}`);
-                                        setTimeout(() => setToastMsg(null), 2500);
-                                      }}
-                                      className="bg-white p-2 rounded-lg border border-slate-200/70 hover:border-blue-400 hover:bg-blue-50/25 transition-all text-left shadow-2xs group flex flex-col gap-0.5 cursor-pointer w-full"
-                                      title="Klik om dit onderdeel te zoeken"
-                                    >
-                                      <div className="font-extrabold text-indigo-950 truncate group-hover:text-blue-750 flex items-center justify-between gap-1 w-full">
-                                        <span className="truncate">{r.match.description}</span>
-                                        {r.match.partNumber && <span className="font-mono text-[9px] text-slate-450 shrink-0">{r.match.partNumber}</span>}
-                                      </div>
-                                      <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500 pt-1 border-t border-slate-50 font-medium">
-                                        <span>Inkoopbedrag:</span>
-                                        <span className="font-black text-rose-600">+€ {r.match.price.toFixed(2)}</span>
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Ontbrekend op Factuur */}
-                            <div className="bg-slate-50/40 p-3 rounded-xl border border-slate-100 flex flex-col gap-2">
-                              <div className="flex items-center justify-between">
-                                <span className="font-extrabold text-[10px] text-rose-700 uppercase tracking-wider">➖ Ontbreekt op Factuur</span>
-                                <span className="bg-rose-100 text-rose-800 px-1.5 py-0.2 rounded text-[9px] font-black">{missingParts.length}</span>
-                              </div>
-                              {missingParts.length === 0 ? (
-                                <p className="text-[10px] text-slate-400 italic py-1">Geen ontbrekende calculatieregels.</p>
-                              ) : (
-                                <div className="flex flex-col gap-1.5 max-h-[220px] overflow-y-auto pr-1">
-                                  {missingParts.map((r, idx) => (
-                                    <button 
-                                      type="button"
-                                      key={idx} 
-                                      onClick={() => {
-                                        setSearchQuery(r.calc.id);
-                                        setToastMsg(`Gefilterd op positie: ${r.calc.id}`);
-                                        setTimeout(() => setToastMsg(null), 2500);
-                                      }}
-                                      className="bg-white p-2 rounded-lg border border-slate-200/70 hover:border-blue-400 hover:bg-blue-50/25 transition-all text-left shadow-2xs group flex flex-col gap-0.5 cursor-pointer w-full"
-                                      title="Klik om dit onderdeel te zoeken"
-                                    >
-                                      <div className="font-extrabold text-rose-950 truncate group-hover:text-blue-750 flex items-center justify-between gap-1 w-full">
-                                        <span className="truncate">{r.calc.description}</span>
-                                        <span className="font-mono text-[9px] bg-slate-100 px-1.5 py-0.2 rounded text-slate-500 shrink-0">Pos {r.calc.id}</span>
-                                      </div>
-                                      <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500 pt-1 border-t border-slate-50 font-medium">
-                                        <span>Te bewijzen inkoop:</span>
-                                        <span className="font-black text-rose-500 font-mono">€ {r.calc.price.toFixed(2)}</span>
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Match suggestions tips */}
-                          {matchSuggestions.length > 0 && (
-                            <div className="bg-blue-50 border border-blue-105 rounded-xl p-3 flex flex-col gap-1.5">
-                              <div className="font-extrabold text-blue-800 text-[10px] uppercase tracking-widest flex items-center gap-1">
-                                <span>💡 Intelligente Match-suggesties (mogelijke match):</span>
-                              </div>
-                              <ul className="list-disc list-inside text-[11px] text-blue-900 font-medium flex flex-col gap-1">
-                                {matchSuggestions.map((s, idx) => (
-                                  <li key={idx}>
-                                    Onderdeel <strong className="text-blue-950">"{s.calc.description}"</strong> (calculatie, € {s.calc.price.toFixed(2)}) en <strong className="text-blue-950">"{s.inv.description}"</strong> (factuur, € {s.inv.price.toFixed(2)}) kunnen overeenstemmen.
-                                  </li>
-                                ))}
-                              </ul>
-                              <p className="text-[9.5px] text-blue-600 leading-tight">
-                                <em>Gecategoriseerd op basis van gelijkenis. Pas de naam of het partnummer in de calculatie of factuur aan zodat ze automatisch matchen!</em>
-                              </p>
-                            </div>
-                          )}
-                        </motion.div>
-                      )}
-                    </div>
-                  )}
                 </div>
-              </div>
+
+                {/* matched invoices / overrides */}
+                <div className="flex flex-col text-left border-t md:border-t-0 md:border-x border-slate-100 pt-3 md:pt-0 md:px-4">
+                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">
+                    Totaal Inkoop / Tarieven
+                  </span>
+                  <div className="flex items-baseline gap-1.5 mt-0.5 animate-pulse-slow">
+                    <span className="text-sm font-black text-blue-600">
+                      € {totalInvoices.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                      ({activeResults.filter(r => r.match || r.manualPrice !== undefined).length} geverifieerd)
+                    </span>
+                  </div>
+                </div>
+
+                {/* live difference */}
+                <div className="flex items-center justify-between md:justify-end gap-3 border-t md:border-t-0 pt-3 md:pt-0">
+                  <div className="text-left md:text-right">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1 block">
+                      Financieel Verschil (Netto)
+                    </span>
+                    <span className={`text-base font-black tracking-tight ${
+                      realTimeDiff < -0.005 
+                        ? 'text-emerald-600' 
+                        : realTimeDiff > 0.005 
+                        ? 'text-rose-600 font-extrabold' 
+                        : 'text-slate-500'
+                    }`}>
+                      {realTimeDiff < -0.005 ? '-' : realTimeDiff > 0.005 ? '+' : ''}€ {Math.abs(realTimeDiff).toFixed(2)}
+                    </span>
+                  </div>
+
+                  <div className={`p-2 rounded-xl shrink-0 ${
+                    realTimeDiff < -0.005 
+                      ? 'bg-emerald-50 border border-emerald-100 text-emerald-600' 
+                      : realTimeDiff > 0.005 
+                      ? 'bg-rose-50 border border-rose-100 text-rose-600 animate-pulse' 
+                      : 'bg-slate-100 border border-slate-200 text-slate-400'
+                  }`}>
+                    {realTimeDiff < -0.005 ? (
+                      <CheckCircle2 size={16} />
+                    ) : realTimeDiff > 0.005 ? (
+                      <AlertCircle size={16} />
+                    ) : (
+                      <Check size={16} />
+                    )}
+                  </div>
+                </div>
+              </motion.div>
             );
           })()}
 
@@ -4527,18 +4293,8 @@ export default function App() {
                       placeholder="Zoek op onderdeel, nummer of ID..." 
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-12 pr-10 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/50 w-full transition-all"
+                      className="pl-12 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500/50 w-full transition-all"
                     />
-                    {searchQuery && (
-                      <button 
-                        type="button"
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all cursor-pointer flex items-center justify-center"
-                        title="Zoekopdracht wissen"
-                      >
-                        <X size={12} className="stroke-[3]" />
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>
