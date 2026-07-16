@@ -1055,7 +1055,6 @@ export default function App() {
   const [kmStand, setKmStand] = useState<string>("");
   const [chassisNumber, setChassisNumber] = useState<string>("");
   const [vehicleData, setVehicleData] = useState<any>(null);
-  const [fallbackVehicleName, setFallbackVehicleName] = useState<string>("");
   const [vehicleLoading, setVehicleLoading] = useState<boolean>(false);
   const [vehicleError, setVehicleError] = useState<string | null>(null);
   const [showRdwModal, setShowRdwModal] = useState<boolean>(false);
@@ -1191,62 +1190,6 @@ export default function App() {
 
     // 4. Extract only the actual Parts lines
     const lines = textToParse.split('\n');
-
-    // 3.5 Parse VEHICLE BRAND & MODEL (Merk & Type)
-    let extractedBrand = "";
-    let extractedModel = "";
-
-    for (const line of lines) {
-      const lowerLine = line.toLowerCase();
-      if (lowerLine.includes("voertuig") && lowerLine.includes(":")) {
-        const parts = line.split(":");
-        if (parts.length > 1) {
-          const value = parts[1].trim();
-          if (value && value.length > 2) {
-            extractedBrand = value;
-          }
-        }
-      }
-      if (lowerLine.includes("merk/type") && lowerLine.includes(":")) {
-        const parts = line.split(":");
-        if (parts.length > 1) {
-          const value = parts[1].trim();
-          if (value && value.length > 2) {
-            extractedBrand = value;
-          }
-        }
-      }
-      if ((lowerLine.includes("fabrikaat") || (lowerLine.includes("merk") && !lowerLine.includes("merk/type"))) && lowerLine.includes(":")) {
-        const parts = line.split(":");
-        if (parts.length > 1) {
-          const value = parts[1].trim();
-          if (value && value.length > 2) {
-            extractedBrand = value;
-          }
-        }
-      }
-      if ((lowerLine.includes("model") || (lowerLine.includes("type") && !lowerLine.includes("merk/type"))) && lowerLine.includes(":")) {
-        const parts = line.split(":");
-        if (parts.length > 1) {
-          const value = parts[1].trim();
-          if (value && value.length > 2) {
-            extractedModel = value;
-          }
-        }
-      }
-    }
-
-    let finalVehicleName = "";
-    if (extractedBrand) {
-      const cleanBrand = extractedBrand.replace(/[\*\-\s]+$/, "").trim();
-      const cleanModel = extractedModel.replace(/[\*\-\s]+$/, "").trim();
-      if (cleanModel && !cleanBrand.toLowerCase().includes(cleanModel.toLowerCase())) {
-        finalVehicleName = `${cleanBrand} ${cleanModel}`;
-      } else {
-        finalVehicleName = cleanBrand;
-      }
-    }
-
     const cleanPartsLines: string[] = [];
     let inPartsSection = false;
 
@@ -1289,10 +1232,6 @@ export default function App() {
       setKmStand(extractedKm);
       updates.push(`KM-stand: ${parseInt(extractedKm, 10).toLocaleString("nl-NL")} km`);
     }
-    if (finalVehicleName && finalVehicleName !== fallbackVehicleName) {
-      setFallbackVehicleName(finalVehicleName);
-      updates.push(`Voertuig: ${finalVehicleName}`);
-    }
 
     const cleanPartsText = cleanPartsLines.join('\n');
     
@@ -1309,7 +1248,7 @@ export default function App() {
       const timer = setTimeout(() => setToastMsg(null), 5000);
       return () => clearTimeout(timer);
     }
-  }, [calcInput, licensePlate, chassisNumber, kmStand, fallbackVehicleName]);
+  }, [calcInput, licensePlate, chassisNumber, kmStand]);
 
   const saveCurrentDossier = () => {
     if (!licensePlate && !caseNumber) {
@@ -1341,7 +1280,6 @@ export default function App() {
       kmStand: kmStand || "",
       chassisNumber: chassisNumber || "",
       vehicleData,
-      fallbackVehicleName: fallbackVehicleName || "",
       calcInput,
       invoiceInput,
       selectedClientId,
@@ -1401,7 +1339,6 @@ export default function App() {
     } else {
       setVehicleData(null);
     }
-    setFallbackVehicleName(dossier.fallbackVehicleName || "");
     setCalcInput(dossier.calcInput || "");
     setInvoiceInput(dossier.invoiceInput || "");
     setSelectedClientId(dossier.selectedClientId || "");
@@ -2423,7 +2360,6 @@ export default function App() {
     setCaseNumber("");
     setKmStand("");
     setChassisNumber("");
-    setFallbackVehicleName("");
     setStatusFilter('all');
     setReadoutPre(false);
     setReadoutPost(false);
@@ -2673,8 +2609,6 @@ export default function App() {
       const brand = vehicleData.merk || "";
       const model = vehicleData.handelsbenaming || "";
       vehicleDesc = `${capitalizeWords(brand)} ${capitalizeWords(model)}`.trim() || "Onbekend";
-    } else if (fallbackVehicleName) {
-      vehicleDesc = capitalizeWords(fallbackVehicleName);
     }
     printMetaLine("Voertuig", vehicleDesc.length > 25 ? vehicleDesc.substring(0, 25) + "..." : vehicleDesc, 19, leftY);
     leftY += itemSpacing;
@@ -3366,48 +3300,6 @@ export default function App() {
                   </button>
                 )}
               </div>
-              
-              {/* Subtle Make/Model Display */}
-              <div className="mt-2 text-[11px] font-bold text-slate-500 flex items-center gap-1.5 ml-1 animate-fade-in min-h-[16px]">
-                {vehicleData || fallbackVehicleName ? (
-                  <>
-                    <CarFront size={12} className="text-blue-500 shrink-0" />
-                    <span className="shrink-0 text-slate-400 font-medium">Voertuig:</span>
-                    <span className="text-slate-850 font-extrabold truncate max-w-[200px]">
-                      {vehicleData 
-                        ? `${capitalizeWords(vehicleData.merk)} ${capitalizeWords(vehicleData.handelsbenaming)}`
-                        : capitalizeWords(fallbackVehicleName)}
-                    </span>
-                    <span className="text-[9px] bg-slate-100 border border-slate-200 text-slate-500 px-1.5 py-0.2 rounded font-black shrink-0 leading-none">
-                      {vehicleData ? "RDW" : "Calculatie"}
-                    </span>
-                    {!vehicleData && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const val = prompt("Voer handmatig merk en model in:", fallbackVehicleName);
-                          if (val !== null) setFallbackVehicleName(val);
-                        }}
-                        className="text-[10px] text-blue-500 hover:text-blue-600 underline font-bold cursor-pointer shrink-0"
-                      >
-                        Wijzig
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const val = prompt("Voer handmatig merk en model in:");
-                      if (val) setFallbackVehicleName(val);
-                    }}
-                    className="text-[10px] text-slate-400 hover:text-blue-500 flex items-center gap-1 transition-colors cursor-pointer"
-                  >
-                    <Plus size={10} />
-                    <span>Voertuig handmatig specificeren</span>
-                  </button>
-                )}
-              </div>
             </div>
 
             <div className="w-full">
@@ -4034,12 +3926,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {(vehicleData || fallbackVehicleName) && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 text-[10px] font-bold animate-fade-in shadow-sm">
-                <CarFront size={12} />
-                <span>Voertuig: <strong className="font-extrabold">{vehicleData ? `${capitalizeWords(vehicleData.merk)} ${capitalizeWords(vehicleData.handelsbenaming)}` : capitalizeWords(fallbackVehicleName)}</strong></span>
-              </div>
-            )}
             <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 italic text-[10px] font-bold">
               <ShieldCheck size={12} />
               Sessie Actief: Danny
