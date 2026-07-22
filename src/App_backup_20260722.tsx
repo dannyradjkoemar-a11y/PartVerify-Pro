@@ -57,7 +57,6 @@ import {
   parseCalculation, 
   parseInvoice, 
   normalizePartNumber, 
-  openGoogleImagesSearch,
   extractBasePartNumbers,
   AutomotivePart,
   descriptionsMatch,
@@ -1077,17 +1076,6 @@ export default function App() {
   const [isManualOpen, setIsManualOpen] = useState(false);
   const [isAudatexCodesOpen, setIsAudatexCodesOpen] = useState(false);
   const [logoClickCount, setLogoClickCount] = useState(0);
-
-  // Helper function to search part number & description on Google Images with current vehicle context
-  const handleGoogleImagesSearch = (partNumber?: string, description?: string) => {
-    let vehicleName = "";
-    if (vehicleData) {
-      vehicleName = `${vehicleData.merk || ''} ${vehicleData.handelsbenaming || ''}`.trim();
-    } else if (fallbackVehicleName) {
-      vehicleName = fallbackVehicleName.trim();
-    }
-    openGoogleImagesSearch(partNumber, description, vehicleName);
-  };
 
   // Set session persistence so closing tab / browser logs out user
   useEffect(() => {
@@ -3666,20 +3654,7 @@ export default function App() {
                                     >
                                       <div className="font-extrabold text-indigo-950 truncate group-hover:text-blue-750 flex items-center justify-between gap-1 w-full">
                                         <span className="truncate">{r.match.description}</span>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          {r.match.partNumber && <span className="font-mono text-[9px] text-slate-450 shrink-0">{r.match.partNumber}</span>}
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleGoogleImagesSearch(r.match.partNumber, r.match.description);
-                                            }}
-                                            className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                            title="Zoek foto op Google Afbeeldingen"
-                                          >
-                                            <Camera size={11} />
-                                          </button>
-                                        </div>
+                                        {r.match.partNumber && <span className="font-mono text-[9px] text-slate-450 shrink-0">{r.match.partNumber}</span>}
                                       </div>
                                       <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500 pt-1 border-t border-slate-50 font-medium">
                                         <span>Inkoopbedrag:</span>
@@ -3715,20 +3690,7 @@ export default function App() {
                                     >
                                       <div className="font-extrabold text-rose-950 truncate group-hover:text-blue-750 flex items-center justify-between gap-1 w-full">
                                         <span className="truncate">{r.calc.description}</span>
-                                        <div className="flex items-center gap-1 shrink-0">
-                                          <span className="font-mono text-[9px] bg-slate-100 px-1.5 py-0.2 rounded text-slate-500 shrink-0">Pos {r.calc.id}</span>
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleGoogleImagesSearch(r.calc.partNumber, r.calc.description);
-                                            }}
-                                            className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                                            title="Zoek foto op Google Afbeeldingen"
-                                          >
-                                            <Camera size={11} />
-                                          </button>
-                                        </div>
+                                        <span className="font-mono text-[9px] bg-slate-100 px-1.5 py-0.2 rounded text-slate-500 shrink-0">Pos {r.calc.id}</span>
                                       </div>
                                       <div className="flex items-center justify-between mt-1 text-[10px] text-slate-500 pt-1 border-t border-slate-50 font-medium">
                                         <span>Te bewijzen inkoop:</span>
@@ -4840,26 +4802,13 @@ export default function App() {
                                   })()}
                                 </div>
                               ) : (
-                                <div className={`font-semibold text-sm text-slate-800 flex items-center justify-between gap-1.5 ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>
-                                  <div className="flex items-center gap-1.5">
-                                    {res.calc.quantity && res.calc.quantity > 1 && (
-                                      <span className="text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 uppercase leading-none">
-                                        {res.calc.quantity}x
-                                      </span>
-                                    )}
-                                    <span className={res.status === 'unmatched_invoice' ? 'text-indigo-900 font-black' : ''}>{res.calc.description}</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleGoogleImagesSearch(res.calc.partNumber, res.calc.description);
-                                    }}
-                                    className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all cursor-pointer opacity-60 hover:opacity-100 shrink-0"
-                                    title={`Zoek '${res.calc.description}' op Google Afbeeldingen`}
-                                  >
-                                    <Camera size={13} className="shrink-0" />
-                                  </button>
+                                <div className={`font-semibold text-sm text-slate-800 flex items-center gap-1.5 ${struckThroughIds.has(res.calc.id) ? 'line-through decoration-slate-400 decoration-2' : ''}`}>
+                                  {res.calc.quantity && res.calc.quantity > 1 && (
+                                    <span className="text-[10px] font-black tracking-wider px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 border border-blue-200 uppercase leading-none">
+                                      {res.calc.quantity}x
+                                    </span>
+                                  )}
+                                  <span className={res.status === 'unmatched_invoice' ? 'text-indigo-900 font-black' : ''}>{res.calc.description}</span>
                                 </div>
                               )}
                               {res.isSemantic && (
@@ -4896,22 +4845,9 @@ export default function App() {
                                   })()}
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-1.5">
-                                  <code className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[11px] font-mono whitespace-nowrap border border-slate-200">
-                                    {res.calc.partNumber}
-                                  </code>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleGoogleImagesSearch(res.calc.partNumber, res.calc.description);
-                                    }}
-                                    className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-200/60 hover:border-blue-200 transition-all cursor-pointer shadow-2xs group/imgbtn shrink-0"
-                                    title={`Zoek onderdeelnummer '${res.calc.partNumber}' op Google Afbeeldingen`}
-                                  >
-                                    <Camera size={13} className="text-slate-400 group-hover/imgbtn:text-blue-600 shrink-0" />
-                                  </button>
-                                </div>
+                                <code className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[11px] font-mono whitespace-nowrap border border-slate-200">
+                                  {res.calc.partNumber}
+                                </code>
                               )}
                             </td>
                             <td className="px-6 py-4 font-black text-slate-900 text-base whitespace-nowrap">
@@ -5024,22 +4960,9 @@ export default function App() {
                                        € {res.match.price.toFixed(2)}
                                      </span>
                                      {res.match.partNumber && (
-                                       <div className="flex items-center gap-1">
-                                         <code className="text-[9.5px] font-mono text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-150 whitespace-nowrap">
-                                            {res.match.partNumber}
-                                         </code>
-                                         <button
-                                           type="button"
-                                           onClick={(e) => {
-                                             e.stopPropagation();
-                                             handleGoogleImagesSearch(res.match.partNumber, res.match.description);
-                                           }}
-                                           className="p-0.5 rounded text-indigo-400 hover:text-indigo-700 hover:bg-white transition-all cursor-pointer shrink-0"
-                                           title={`Zoek '${res.match.partNumber || res.match.description}' op Google Afbeeldingen`}
-                                         >
-                                           <Camera size={11} className="shrink-0" />
-                                         </button>
-                                       </div>
+                                       <code className="text-[9.5px] font-mono text-indigo-600 bg-white px-1.5 py-0.5 rounded border border-indigo-150 whitespace-nowrap">
+                                          {res.match.partNumber}
+                                       </code>
                                      )}
                                    </div>
                                  </div>
@@ -5093,22 +5016,9 @@ export default function App() {
                                        <span className={`font-black text-xs text-emerald-600`}>
                                          € {res.match.price.toFixed(2)}
                                        </span>
-                                       <div className="flex items-center gap-1">
-                                         <code className="text-[10px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/50 whitespace-nowrap">
-                                            {res.match.partNumber}
-                                         </code>
-                                         <button
-                                           type="button"
-                                           onClick={(e) => {
-                                             e.stopPropagation();
-                                             handleGoogleImagesSearch(res.match.partNumber, res.match.description);
-                                           }}
-                                           className="p-0.5 rounded text-slate-400 hover:text-blue-600 hover:bg-white transition-all cursor-pointer shrink-0"
-                                           title={`Zoek '${res.match.partNumber || res.match.description}' op Google Afbeeldingen`}
-                                         >
-                                           <Camera size={11} className="shrink-0" />
-                                         </button>
-                                       </div>
+                                       <code className="text-[10px] font-mono text-slate-500 bg-white/80 px-1.5 py-0.5 rounded border border-slate-200/50 whitespace-nowrap">
+                                          {res.match.partNumber}
+                                       </code>
                                      </div>
                                    )}
                                  </div>
@@ -6959,17 +6869,7 @@ function AdminView({
                       return (
                         <div key={p.id} className="py-3 flex items-center justify-between group hover:bg-slate-50/50 px-2 rounded-2xl transition-all">
                           <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2 shrink-0">
-                              <code className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg shrink-0">{p.partNumber}</code>
-                              <button
-                                type="button"
-                                onClick={() => openGoogleImagesSearch(p.partNumber, p.description)}
-                                className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 border border-slate-200/60 transition-all cursor-pointer shrink-0"
-                                title="Zoek foto op Google Afbeeldingen"
-                              >
-                                <Camera size={12} />
-                              </button>
-                            </div>
+                            <code className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg w-32 shrink-0">{p.partNumber}</code>
                             <div className="w-48 text-sm font-medium text-slate-700 truncate">{p.description || "Geen omschrijving"}</div>
                             <div className="text-xs font-black text-emerald-800 bg-emerald-50/80 border border-emerald-100 px-3 py-1 rounded-xl">
                               € {typeof p.price === 'number' ? p.price.toFixed(2) : parseFloat(p.price || 0).toFixed(2)}

@@ -10,23 +10,6 @@ export const normalizePartNumber = (part: string): string => {
   return part.replace(/[\s,.\-_/]/g, '').toUpperCase();
 };
 
-export const openGoogleImagesSearch = (partNumber?: string, description?: string, vehicleName?: string) => {
-  const cleanPartNo = (partNumber && partNumber !== "00000000" && partNumber !== "Geen partnummer" && !partNumber.startsWith("FACT-")) ? partNumber.trim() : "";
-  const cleanDesc = (description && description !== "Nieuw Onderdeel") ? description.trim() : "";
-  const cleanVehicle = vehicleName ? vehicleName.trim() : "";
-
-  const terms: string[] = [];
-  if (cleanPartNo) terms.push(cleanPartNo);
-  if (cleanDesc) terms.push(cleanDesc);
-  if (cleanVehicle) terms.push(cleanVehicle);
-
-  const query = terms.join(" ");
-  if (!query) return;
-
-  const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&tbm=isch`;
-  window.open(searchUrl, "_blank", "noopener,noreferrer");
-};
-
 export const extractBasePartNumbers = (description: string, partNumber: string): string[] => {
   const combined = `${partNumber} ${description}`.toUpperCase();
   // Standard VAG part numbers are like "2G7 805 903 B" or "2G7805903b"
