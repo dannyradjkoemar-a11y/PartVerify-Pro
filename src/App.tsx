@@ -4390,23 +4390,27 @@ export default function App() {
                 {/* Inputs - Side-by-side */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <InputSection 
-                title="Eindcalculatie" 
-                placeholder="Plak hier uw eindcalculatie gegevens..." 
-                value={calcInput} 
-                onChange={setCalcInput} 
-                icon={<ClipboardCheck className="w-5 h-5 text-blue-600" />}
-                partCount={calculationParts.length}
-                onFormat={() => setCalcInput(formatCalculationText(calcInput))}
-              />
-              <InputSection 
-                title="Inkoopfacturen" 
-                placeholder="Plak hier de gegevens van inkoopfactur(en)..." 
-                value={invoiceInput} 
-                onChange={setInvoiceInput} 
-                icon={<Layers className="w-5 h-5 text-indigo-600" />}
-                partCount={invoiceParts.length}
-              />
-            </div>
+                    title="Eindcalculatie" 
+                    placeholder="Plak hier uw eindcalculatie gegevens..." 
+                    value={calcInput} 
+                    onChange={setCalcInput} 
+                    icon={<ClipboardCheck className="w-5 h-5 text-blue-600" />}
+                    partCount={calculationParts.length}
+                    parts={calculationParts}
+                    onSearchImage={handleGoogleImagesSearch}
+                    onFormat={() => setCalcInput(formatCalculationText(calcInput))}
+                  />
+                  <InputSection 
+                    title="Inkoopfacturen" 
+                    placeholder="Plak hier de gegevens van inkoopfactur(en)..." 
+                    value={invoiceInput} 
+                    onChange={setInvoiceInput} 
+                    icon={<Layers className="w-5 h-5 text-indigo-600" />}
+                    partCount={invoiceParts.length}
+                    parts={invoiceParts}
+                    onSearchImage={handleGoogleImagesSearch}
+                  />
+                </div>
 
             {/* Compact Performance Statistics Toolbar */}
             <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 items-stretch">
@@ -5011,13 +5015,26 @@ export default function App() {
                                    className="p-1.5 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100/70 cursor-pointer transition-all shadow-sm flex flex-col gap-1 text-left"
                                    title="Klik om dit onderdeel toe te voegen aan de calculatie"
                                  >
-                                   <div className="flex items-center gap-1 mb-1 flex-wrap">
-                                     <span className="text-[8.5px] font-black tracking-wider px-1.5 py-0.5 rounded bg-indigo-600 text-white border border-indigo-500 shadow-sm leading-none">
-                                        FACTUUR
-                                      </span>
-                                     <span className="text-indigo-900 text-xs font-bold truncate max-w-[150px]" title={res.match.description}>
-                                       {res.match.description}
-                                     </span>
+                                   <div className="flex items-center justify-between gap-1 mb-1">
+                                     <div className="flex items-center gap-1 flex-wrap min-w-0">
+                                       <span className="text-[8.5px] font-black tracking-wider px-1.5 py-0.5 rounded bg-indigo-600 text-white border border-indigo-500 shadow-sm leading-none">
+                                         FACTUUR
+                                       </span>
+                                       <span className="text-indigo-900 text-xs font-bold truncate max-w-[140px]" title={res.match.description}>
+                                         {res.match.description}
+                                       </span>
+                                     </div>
+                                     <button
+                                       type="button"
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         handleGoogleImagesSearch(res.match.partNumber, res.match.description);
+                                       }}
+                                       className="p-1 rounded-md text-indigo-500 hover:text-white hover:bg-indigo-600 bg-white border border-indigo-200 transition-all cursor-pointer shadow-2xs shrink-0 inline-flex items-center"
+                                       title={`Zoek '${res.match.partNumber || res.match.description}' op Google Afbeeldingen`}
+                                     >
+                                       <Camera size={11} className="shrink-0" />
+                                     </button>
                                    </div>
                                    <div className="flex items-center gap-2">
                                      <span className="font-extrabold text-xs text-indigo-700">
@@ -5052,25 +5069,38 @@ export default function App() {
                                         : 'bg-rose-50 border-rose-200 hover:bg-rose-100'
                                    }`}
                                  >
-                                   <div className="flex items-center gap-1 mb-1 flex-wrap">
-                                     <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
-                                        {res.calc.id}
-                                      </span>
-                                     <span className="text-slate-700 text-xs font-bold truncate max-w-[150px]" title={res.match.description}>
-                                       <>
-                                         {res.match.quantity && res.match.quantity > 1 && (
-                                           <span className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 uppercase leading-none mr-1 inline-block">
-                                             {res.match.quantity}x
-                                           </span>
-                                         )}
-                                         {res.match.description}
-                                       </>
-                                     </span>
-                                     {res.isSemantic && (
-                                       <span title="Intelligente match op beschrijving" className="text-indigo-600 bg-indigo-50 border border-indigo-150 px-1 py-0.5 text-[8px] rounded font-bold uppercase tracking-widest">
-                                         Sem
+                                   <div className="flex items-center justify-between gap-1 mb-1">
+                                     <div className="flex items-center gap-1 flex-wrap min-w-0">
+                                       <span className="text-[11px] font-black tracking-wider px-2 py-0.5 rounded-md bg-yellow-300 text-slate-950 border border-yellow-400 shadow-sm leading-none flex items-center justify-center">
+                                         {res.calc.id}
                                        </span>
-                                     )}
+                                       <span className="text-slate-700 text-xs font-bold truncate max-w-[140px]" title={res.match.description}>
+                                         <>
+                                           {res.match.quantity && res.match.quantity > 1 && (
+                                             <span className="text-[10px] font-black tracking-wider px-1 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 uppercase leading-none mr-1 inline-block">
+                                               {res.match.quantity}x
+                                             </span>
+                                           )}
+                                           {res.match.description}
+                                         </>
+                                       </span>
+                                       {res.isSemantic && (
+                                         <span title="Intelligente match op beschrijving" className="text-indigo-600 bg-indigo-50 border border-indigo-150 px-1 py-0.5 text-[8px] rounded font-bold uppercase tracking-widest">
+                                           Sem
+                                         </span>
+                                       )}
+                                     </div>
+                                     <button
+                                       type="button"
+                                       onClick={(e) => {
+                                         e.stopPropagation();
+                                         handleGoogleImagesSearch(res.match.partNumber, res.match.description);
+                                       }}
+                                       className="p-1 rounded-md text-slate-400 hover:text-blue-600 hover:bg-white border border-slate-200/60 bg-white/80 transition-all cursor-pointer shadow-2xs shrink-0"
+                                       title={`Zoek '${res.match.partNumber || res.match.description}' op Google Afbeeldingen`}
+                                     >
+                                       <Camera size={11} className="shrink-0" />
+                                     </button>
                                    </div>
                                    
                                    {res.status === 'deviation' ? (
@@ -5084,10 +5114,30 @@ export default function App() {
                                             {res.calc.id}
                                           </span>
                                         </div>
-                                       <span className="font-black text-sm leading-tight">
-                                         € {res.match.price.toFixed(2)}
-                                       </span>
-                                     </div>
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className="font-black text-sm leading-tight">
+                                            € {res.match.price.toFixed(2)}
+                                          </span>
+                                          <div className="flex items-center gap-1">
+                                            {res.match.partNumber && (
+                                              <code className="text-[9px] font-mono text-emerald-100 bg-emerald-700/80 px-1.5 py-0.5 rounded">
+                                                {res.match.partNumber}
+                                              </code>
+                                            )}
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleGoogleImagesSearch(res.match.partNumber, res.match.description);
+                                              }}
+                                              className="p-1 rounded bg-emerald-700 hover:bg-white hover:text-emerald-800 text-white transition-all cursor-pointer shrink-0"
+                                              title={`Zoek foto '${res.match.partNumber || res.match.description}'`}
+                                            >
+                                              <Camera size={10} className="shrink-0" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      </div>
                                    ) : (
                                      <div className="flex items-center gap-2">
                                        <span className={`font-black text-xs text-emerald-600`}>
@@ -7963,28 +8013,83 @@ function StatsCard({
   );
 }
 
-function InputSection({ title, placeholder, value, onChange, icon, partCount, onFormat }: { title: string, placeholder: string, value: string, onChange: (v: string) => void, icon?: React.ReactNode, partCount?: number, onFormat?: () => void }) {
+function InputSection({ 
+  title, 
+  placeholder, 
+  value, 
+  onChange, 
+  icon, 
+  partCount, 
+  parts,
+  onSearchImage,
+  onFormat 
+}: { 
+  title: string, 
+  placeholder: string, 
+  value: string, 
+  onChange: (v: string) => void, 
+  icon?: React.ReactNode, 
+  partCount?: number, 
+  parts?: AutomotivePart[],
+  onSearchImage?: (partNumber?: string, description?: string) => void,
+  onFormat?: () => void 
+}) {
+  const [viewMode, setViewMode] = useState<'text' | 'parts'>('text');
+
   return (
     <div className="flex flex-col space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
           <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
             {icon}
             {title}
           </label>
           {partCount !== undefined && partCount > 0 && (
-            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
-              title === "Eindcalculatie" ? "bg-blue-100 text-blue-700" : "bg-indigo-100 text-indigo-700"
-            }`}>
+            <button
+              type="button"
+              onClick={() => setViewMode(viewMode === 'text' ? 'parts' : 'text')}
+              className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer hover:opacity-85 ${
+                title === "Eindcalculatie" ? "bg-blue-100 text-blue-700" : "bg-indigo-100 text-indigo-700"
+              }`}
+              title="Klik om te wisselen tussen tekstveld en onderdelenlijst"
+            >
               {partCount} {partCount === 1 ? 'onderdeel' : 'onderdelen'}
-            </span>
+            </button>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          {onFormat && value && (
+        <div className="flex items-center gap-2">
+          {parts && parts.length > 0 && (
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200/80 shadow-2xs">
+              <button 
+                type="button"
+                onClick={() => setViewMode('text')}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  viewMode === 'text' 
+                    ? 'bg-white text-slate-800 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Tekst
+              </button>
+              <button 
+                type="button"
+                onClick={() => setViewMode('parts')}
+                className={`px-3 py-1 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
+                  viewMode === 'parts' 
+                    ? 'bg-blue-600 text-white shadow-sm' 
+                    : 'text-blue-700 bg-blue-50/60 hover:bg-blue-100/60'
+                }`}
+                title="Bekijk alle herkende onderdelen met fotoknoppen"
+              >
+                <Camera size={12} className={viewMode === 'parts' ? 'text-white' : 'text-blue-600'} />
+                <span>Onderdelen ({parts.length})</span>
+              </button>
+            </div>
+          )}
+          {onFormat && value && viewMode === 'text' && (
             <button 
               onClick={onFormat}
-              className="text-[10px] font-black text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-full uppercase tracking-widest transition-all flex items-center gap-1"
+              className="text-[10px] font-black text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-full uppercase tracking-widest transition-all flex items-center gap-1 cursor-pointer"
               title="Lijn multi-line regels uit tot overzichtelijke enkele regels"
             >
               <span>✦ Lijn uit</span>
@@ -7993,65 +8098,138 @@ function InputSection({ title, placeholder, value, onChange, icon, partCount, on
           {value && (
             <button 
               onClick={() => onChange("")}
-              className="text-[10px] font-bold text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors"
+              className="text-[10px] font-bold text-slate-400 hover:text-rose-500 uppercase tracking-widest transition-colors cursor-pointer"
             >
               Leegmaken
             </button>
           )}
         </div>
       </div>
-      <div className="relative group">
-        <textarea 
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onPaste={(e) => {
-            if (title === "Eindcalculatie") {
-              e.preventDefault();
-              const pastedText = e.clipboardData.getData("text");
-              const formattedText = formatCalculationText(pastedText);
-              
-              const textarea = e.currentTarget;
-              const start = textarea.selectionStart;
-              const end = textarea.selectionEnd;
-              const text = textarea.value;
-              const newValue = text.substring(0, start) + formattedText + text.substring(end);
-              
-              onChange(newValue);
-              
-              setTimeout(() => {
-                textarea.selectionStart = textarea.selectionEnd = start + formattedText.length;
-              }, 0);
-            } else if (title === "Inkoopfacturen") {
-              e.preventDefault();
-              let pastedText = e.clipboardData.getData("text");
-              
-              // Ensure pasted text ends with a newline, simulating hitting enter after paste
-              if (pastedText && !pastedText.endsWith("\n")) {
-                pastedText += "\n";
+
+      {parts && parts.length > 0 && viewMode === 'text' && (
+        <div 
+          onClick={() => setViewMode('parts')}
+          className={`p-2.5 px-3.5 rounded-2xl cursor-pointer transition-all flex items-center justify-between text-xs font-bold shadow-2xs border ${
+            title === "Eindcalculatie" 
+              ? "bg-blue-50/90 hover:bg-blue-100 border-blue-200 text-blue-900" 
+              : "bg-indigo-50/90 hover:bg-indigo-100 border-indigo-200 text-indigo-900"
+          }`}
+          title="Klik om direct de onderdelen met foto-zoekknoppen te bekijken"
+        >
+          <div className="flex items-center gap-2">
+            <div className={`p-1 rounded-lg ${title === "Eindcalculatie" ? "bg-blue-600 text-white" : "bg-indigo-600 text-white"}`}>
+              <Camera size={13} />
+            </div>
+            <span>{parts.length} {parts.length === 1 ? 'onderdeel' : 'onderdelen'} herkend met fotoknop optie</span>
+          </div>
+          <span className="text-[11px] font-black underline flex items-center gap-1">
+            Bekijk met fotoknoppen →
+          </span>
+        </div>
+      )}
+
+      {viewMode === 'parts' && parts && parts.length > 0 ? (
+        <div className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-3 overflow-y-auto divide-y divide-slate-100 shadow-sm flex flex-col gap-1">
+          <div className="pb-2 px-2 flex items-center justify-between text-[11px] font-bold text-slate-400 uppercase tracking-wider sticky top-0 bg-white/95 backdrop-blur z-10">
+            <span>Onderdeel & Fotoknop</span>
+            <span>Prijs</span>
+          </div>
+          {parts.map((part, idx) => (
+            <div key={idx} className="py-2 px-2 flex items-center justify-between gap-2 hover:bg-slate-50/80 rounded-xl transition-colors">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <span className="text-[10px] font-bold text-slate-400 font-mono w-5 shrink-0">#{idx + 1}</span>
+                <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                  {part.partNumber && part.partNumber !== "00000000" && !part.partNumber.startsWith("FACT-") ? (
+                    <code className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-mono whitespace-nowrap border border-slate-200 shrink-0 font-bold">
+                      {part.partNumber}
+                    </code>
+                  ) : null}
+                  <span className="text-xs font-semibold text-slate-800 truncate max-w-[180px] sm:max-w-[240px]" title={part.description}>
+                    {part.description || "Onderdeel"}
+                  </span>
+                  <button 
+                    type="button" 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSearchImage?.(part.partNumber, part.description);
+                    }}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white border border-blue-200 transition-all cursor-pointer shadow-2xs group/btn shrink-0 text-[10px] font-bold"
+                    title={`Zoek '${part.partNumber || part.description}' op Google Afbeeldingen`}
+                  >
+                    <Camera size={11} className="shrink-0 text-blue-600 group-hover/btn:text-white" />
+                    <span>Foto</span>
+                  </button>
+                  {part.quantity && part.quantity > 1 && (
+                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 shrink-0">
+                      {part.quantity}x
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {part.price !== undefined && (
+                  <span className="text-xs font-black text-slate-700 whitespace-nowrap">
+                    € {typeof part.price === 'number' ? part.price.toFixed(2) : parseFloat(String(part.price || 0)).toFixed(2)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="relative group">
+          <textarea 
+            placeholder={placeholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onPaste={(e) => {
+              if (title === "Eindcalculatie") {
+                e.preventDefault();
+                const pastedText = e.clipboardData.getData("text");
+                const formattedText = formatCalculationText(pastedText);
+                
+                const textarea = e.currentTarget;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const text = textarea.value;
+                const newValue = text.substring(0, start) + formattedText + text.substring(end);
+                
+                onChange(newValue);
+                
+                setTimeout(() => {
+                  textarea.selectionStart = textarea.selectionEnd = start + formattedText.length;
+                }, 0);
+              } else if (title === "Inkoopfacturen") {
+                e.preventDefault();
+                let pastedText = e.clipboardData.getData("text");
+                
+                // Ensure pasted text ends with a newline, simulating hitting enter after paste
+                if (pastedText && !pastedText.endsWith("\n")) {
+                  pastedText += "\n";
+                }
+                
+                const textarea = e.currentTarget;
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const text = textarea.value;
+                const newValue = text.substring(0, start) + pastedText + text.substring(end);
+                
+                onChange(newValue);
+                
+                setTimeout(() => {
+                  textarea.selectionStart = textarea.selectionEnd = start + pastedText.length;
+                }, 0);
               }
-              
-              const textarea = e.currentTarget;
-              const start = textarea.selectionStart;
-              const end = textarea.selectionEnd;
-              const text = textarea.value;
-              const newValue = text.substring(0, start) + pastedText + text.substring(end);
-              
-              onChange(newValue);
-              
-              setTimeout(() => {
-                textarea.selectionStart = textarea.selectionEnd = start + pastedText.length;
-              }, 0);
-            }
-          }}
-          className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-[10.5px] font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none leading-relaxed"
-        />
-        <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="px-2 py-1 bg-slate-100 rounded text-[10px] text-slate-400 font-bold uppercase">
-            {value.split('\n').filter(l => l.trim()).length} Lijnen
+            }}
+            className="w-full h-52 bg-white border border-slate-200 rounded-3xl p-6 text-[10.5px] font-mono text-slate-600 focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500/50 transition-all shadow-sm resize-none leading-relaxed"
+          />
+          <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="px-2 py-1 bg-slate-100 rounded text-[10px] text-slate-400 font-bold uppercase">
+              {value.split('\n').filter(l => l.trim()).length} Lijnen
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
