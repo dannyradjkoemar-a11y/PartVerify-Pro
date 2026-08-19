@@ -11,7 +11,10 @@ export const normalizePartNumber = (part: string): string => {
 };
 
 export const openGoogleImagesSearch = (partNumber?: string, description?: string, vehicleName?: string) => {
-  const cleanPartNo = (partNumber && partNumber !== "00000000" && partNumber !== "Geen partnummer" && !partNumber.startsWith("FACT-")) ? partNumber.trim() : "";
+  // Remove all spaces from part number (e.g. "96 09 721 09R" becomes "960972109R")
+  const cleanPartNo = (partNumber && partNumber !== "00000000" && partNumber !== "Geen partnummer" && !partNumber.startsWith("FACT-") && !partNumber.startsWith("MAN-")) 
+    ? partNumber.replace(/\s+/g, "").trim() 
+    : "";
   const cleanDesc = (description && description !== "Nieuw Onderdeel") ? description.trim() : "";
   const cleanVehicle = vehicleName ? vehicleName.trim() : "";
 
