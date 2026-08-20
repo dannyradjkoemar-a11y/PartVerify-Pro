@@ -184,6 +184,7 @@ export default function App() {
   const [readoutPost, setReadoutPost] = useState(false);
   const [alignmentStatus, setAlignmentStatus] = useState<'none' | 'intern' | 'extern'>('none');
   const [calibrationStatus, setCalibrationStatus] = useState<'none' | 'intern' | 'extern'>('none');
+  const [ovsPresent, setOvsPresent] = useState(false);
   const [calcInput, setCalcInput] = useState("");
   const [invoiceInput, setInvoiceInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1360,6 +1361,11 @@ export default function App() {
       clientName,
       manualOverrides,
       manualParts,
+      readoutPre,
+      readoutPost,
+      alignmentStatus,
+      calibrationStatus,
+      ovsPresent,
       removedPartIds: Array.from(removedPartIds),
       dismissedInvoicePartIds: Array.from(dismissedInvoicePartIds),
       struckThroughIds: Array.from(struckThroughIds),
@@ -1419,6 +1425,11 @@ export default function App() {
     setSelectedClientId(dossier.selectedClientId || "");
     setManualOverrides(dossier.manualOverrides || {});
     setManualParts(dossier.manualParts || []);
+    setReadoutPre(dossier.readoutPre || false);
+    setReadoutPost(dossier.readoutPost || false);
+    setAlignmentStatus(dossier.alignmentStatus || 'none');
+    setCalibrationStatus(dossier.calibrationStatus || 'none');
+    setOvsPresent(dossier.ovsPresent || false);
     setRemovedPartIds(new Set(dossier.removedPartIds || []));
     setDismissedInvoicePartIds(new Set(dossier.dismissedInvoicePartIds || []));
     setStruckThroughIds(new Set(dossier.struckThroughIds || []));
@@ -2441,6 +2452,7 @@ export default function App() {
     setReadoutPost(false);
     setAlignmentStatus('none');
     setCalibrationStatus('none');
+    setOvsPresent(false);
   };
 
   const toggleRedPriceStrikethrough = (id: string) => {
@@ -2831,6 +2843,7 @@ export default function App() {
     if (readoutPost) checkListItems.push("Diagnose NA: OK");
     if (alignmentStatus !== 'none') checkListItems.push(`Uitlijnen: ${alignmentStatus === 'intern' ? 'Interne post' : 'Externe post'}`);
     if (calibrationStatus !== 'none') checkListItems.push(`ADAS: ${calibrationStatus === 'intern' ? 'Interne post' : 'Externe post'}`);
+    if (ovsPresent) checkListItems.push("OVS: Aanwezig");
 
     let diagnosticHeight = 12;
     if (checkListItems.length > 0) {
@@ -3914,6 +3927,31 @@ export default function App() {
             </button>
           </div>
 
+          {/* OVS Aanwezig */}
+          <button 
+            type="button"
+            onClick={() => setOvsPresent(!ovsPresent)}
+            className={`w-full p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-2 select-none active:scale-95 text-xs font-bold ${
+              ovsPresent 
+                ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                : 'border-slate-150 bg-slate-50 hover:bg-slate-100 text-slate-500'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                ovsPresent ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
+              }`}>
+                {ovsPresent && <Check size={10} strokeWidth={3} />}
+              </div>
+              <span>OVS aanwezig</span>
+            </div>
+            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+              ovsPresent ? 'bg-emerald-200/70 text-emerald-900' : 'bg-slate-200/70 text-slate-600'
+            }`}>
+              {ovsPresent ? 'Ja' : 'Nee'}
+            </span>
+          </button>
+
           <div className="space-y-1">
             <div className="flex justify-between items-center text-[10px] font-bold">
               <span className="text-slate-550 uppercase tracking-wider">Uitlijnen (Geometrie):</span>
@@ -4269,6 +4307,31 @@ export default function App() {
                       <span className="truncate">Uitlezen NA</span>
                     </button>
                   </div>
+
+                  {/* OVS Aanwezig */}
+                  <button 
+                    type="button"
+                    onClick={() => setOvsPresent(!ovsPresent)}
+                    className={`w-full p-2 rounded-xl border text-left transition-all flex items-center justify-between gap-2 select-none active:scale-95 text-xs font-bold ${
+                      ovsPresent 
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800' 
+                        : 'border-slate-150 bg-slate-50 hover:bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-4 h-4 rounded-md border flex items-center justify-center shrink-0 transition-colors ${
+                        ovsPresent ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-300 bg-white'
+                      }`}>
+                        {ovsPresent && <Check size={10} strokeWidth={3} />}
+                      </div>
+                      <span>OVS aanwezig</span>
+                    </div>
+                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${
+                      ovsPresent ? 'bg-emerald-200/70 text-emerald-900' : 'bg-slate-200/70 text-slate-600'
+                    }`}>
+                      {ovsPresent ? 'Ja' : 'Nee'}
+                    </span>
+                  </button>
 
                   {/* Alignment Toggle */}
                   <div className="space-y-1">
