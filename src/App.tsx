@@ -45,7 +45,8 @@ import {
   Edit2,
   Upload,
   Link,
-  Database
+  Database,
+  BookOpen
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
@@ -70,6 +71,7 @@ import { ManualModal } from "./components/ManualModal";
 import { PhotoAnalysisTab } from "./components/PhotoAnalysisTab";
 import { AudatexCodesModal } from "./components/AudatexCodesModal";
 import SchadeObservatiesTab from "./components/SchadeObservatiesTab";
+import { AftrekcheckModule } from "./components/AftrekcheckModule";
 import { 
   searchAudatexParts, 
   findAudatexPartByCode, 
@@ -179,7 +181,7 @@ export default function App() {
   const [showPassword, setShowPassword] = useState(false);
   const [loginStep, setLoginStep] = useState<'password' | 'tfa' | 'tfa-setup'>('password');
   const [view, setView] = useState<'dashboard' | 'settings' | 'admin'>('dashboard');
-  const [dashboardTab, setDashboardTab] = useState<'verification' | 'photo_analysis' | 'training_center' | 'schade_observaties'>('verification');
+  const [dashboardTab, setDashboardTab] = useState<'verification' | 'aftrekcheck'>('verification');
   const [readoutPre, setReadoutPre] = useState(false);
   const [readoutPost, setReadoutPost] = useState(false);
   const [alignmentStatus, setAlignmentStatus] = useState<'none' | 'intern' | 'extern'>('none');
@@ -193,6 +195,31 @@ export default function App() {
 
   const [clients, setClients] = useState<any[]>([]);
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+
+  // Aangepaste afkortingen en synoniemen voor schadeherstel / calculatie
+  const [customSynonyms, setCustomSynonyms] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem("partverify_custom_synonyms");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error("Fout bij laden van custom synonyms:", e);
+    }
+    // Standaard default synoniem zoals door gebruiker gedefinieerd
+    return {
+      "atp": "achtertussenpaneel"
+    };
+  });
+
+  const handleUpdateCustomSynonyms = (updated: Record<string, string>) => {
+    setCustomSynonyms(updated);
+    try {
+      localStorage.setItem("partverify_custom_synonyms", JSON.stringify(updated));
+    } catch (e) {
+      console.error("Fout bij opslaan custom synonyms:", e);
+    }
+  };
 
   // Premium Design Studio Styles state variables
   const [layoutShape, setLayoutShape] = useState<string>(() => localStorage.getItem("partverify_layout_shape") || "slightly-rounded");
@@ -1097,9 +1124,9 @@ export default function App() {
     });
   }, []);
 
-  // Secure photo analysis tab tab-switching safety check limit to admin only
+  // Tab safety check
   useEffect(() => {
-    if (userProfile && userProfile.role !== "admin" && (dashboardTab === "photo_analysis" || dashboardTab === "training_center")) {
+    if (userProfile && userProfile.role !== "admin" && dashboardTab !== "verification" && dashboardTab !== "aftrekcheck") {
       setDashboardTab("verification");
     }
   }, [userProfile, dashboardTab]);
@@ -1510,9 +1537,10 @@ export default function App() {
             const lowerEmail = u.email?.toLowerCase();
             const isAdminEmail = lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com";
             
-            // Force 2FA for admins/owner (bypassable via god mode settings if set)
-            const isBypassed = localStorage.getItem("godmode_bypass_2fa") === "true";
-            const effectiveTfaEnabled = isBypassed ? false : (isAdminEmail ? true : (profile.tfaEnabled || false));
+            // Clean up any legacy insecure localStorage bypass flag
+            localStorage.removeItem("godmode_bypass_2fa");
+            // Enforce 2FA strictly via Firestore profile (default true for admin accounts unless explicitly disabled in Firestore)
+            const effectiveTfaEnabled = isAdminEmail ? (profile.tfaEnabled !== false) : Boolean(profile.tfaEnabled);
             
             setUserProfile(profile);
             setIsTfaEnabled(effectiveTfaEnabled);
@@ -1534,51 +1562,50 @@ export default function App() {
               setIsAuthorized(true);
             }
           } else {
-            // New user (should only happen via Admin creation usually, but first one can be special)
+            // Only owner/admin emails can bootstrap without an existing Admin-created whitelist entry
             const lowerEmail = u.email?.toLowerCase();
+            localStorage.removeItem("godmode_bypass_2fa");
             if (lowerEmail === "partverify-pro@outlook.com" || lowerEmail === "dannyradjkoemar@gmail.com") {
-              const isBypassed = localStorage.getItem("godmode_bypass_2fa") === "true";
               const initialProfile = {
-                email: u.email,
+                email: lowerEmail,
                 role: "admin",
-                tfaEnabled: isBypassed ? false : true, // Default to true for admins
+                tfaEnabled: true,
                 createdAt: serverTimestamp()
               };
               try {
                 await setDoc(doc(db, "users", u.uid), initialProfile);
                 setUserProfile(initialProfile);
-                if (isBypassed) {
-                  setIsAuthorized(true);
-                } else {
-                  setIsAuthorized(false);
-                  setLoginStep('tfa-setup');
-                  const secret = new OTPAuth.Secret().base32;
-                  setTfaSecret(secret);
-                }
+                setIsAuthorized(false);
+                setLoginStep('tfa-setup');
+                const secret = new OTPAuth.Secret().base32;
+                setTfaSecret(secret);
               } catch (setErr) {
                 handleFirestoreError(setErr, 'write', `users/${u.uid}`);
                 await signOut(auth);
               }
             } else {
-              // Automatically initialize as user since "iedereen die wordt toegevoegd automatisch user is"
-              const initialProfile = {
-                email: u.email,
-                role: "user",
-                tfaEnabled: false,
-                tfaSecret: null,
-                createdAt: serverTimestamp()
-              };
+              // Reject any email address that was not pre-approved/whitelisted by an Admin
               try {
-                await setDoc(doc(db, "users", u.uid), initialProfile);
-                setUserProfile(initialProfile);
-                setIsTfaEnabled(false);
-                setTfaSecret(null);
-                setIsAuthorized(true);
-              } catch (setErr) {
-                handleFirestoreError(setErr, 'write', `users/${u.uid}`);
-                await signOut(auth);
-                alert("Er is een fout opgetreden bij het registreren van uw profiel.");
+                await addDoc(collection(db, "login_attempts"), {
+                  email: lowerEmail || u.email || "onbekend",
+                  timestamp: serverTimestamp(),
+                  userAgent: navigator.userAgent,
+                  status: "blocked_unapproved_email"
+                });
+              } catch (_) {
+                // Ignore logging errors
               }
+              try {
+                await u.delete();
+              } catch (_) {
+                // Ignore if deletion requires re-auth
+              }
+              await signOut(auth);
+              setUser(null);
+              setUserProfile(null);
+              setIsAuthorized(false);
+              setLoginStep('password');
+              alert("Toegang geweigerd: Dit e-mailadres is niet geautoriseerd door de beheerder.");
             }
           }
         } catch (err) {
@@ -4077,36 +4104,87 @@ export default function App() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <div 
-            className="flex items-center gap-3 cursor-pointer select-none active:scale-98 transition-transform"
-            onClick={() => {
-              if (user?.email?.toLowerCase() !== "partverify-pro@outlook.com") return;
-              setLogoClickCount(prev => {
-                const next = prev + 1;
-                if (next >= 5) {
-                  setIsBackdoorOpen(true);
-                  setToastMsg("Ontwikkelaarsbypass geactiveerd!");
-                  setTimeout(() => setToastMsg(null), 3000);
-                  return 0;
-                }
-                return next;
-              });
-            }}
-          >
-            <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 relative">
-              <CarFront className="text-white w-6 h-6" />
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-md p-0.5 shadow-sm">
-                <ClipboardCheck className="text-blue-600 w-3 h-3" />
+          <div className="flex items-center gap-3">
+            {dashboardTab === 'aftrekcheck' ? (
+              /* AE Module Mode: ONLY show user supplied AE Module Logo */
+              <div 
+                className="flex items-center gap-3 cursor-pointer select-none"
+                onClick={() => {
+                  if (user?.email?.toLowerCase() === "partverify-pro@outlook.com") {
+                    setLogoClickCount(prev => {
+                      const next = prev + 1;
+                      if (next >= 5) {
+                        setIsBackdoorOpen(true);
+                        setToastMsg("Ontwikkelaarsbypass geactiveerd!");
+                        setTimeout(() => setToastMsg(null), 3000);
+                        return 0;
+                      }
+                      return next;
+                    });
+                  }
+                  setView('dashboard');
+                }}
+                title="AE Module (Audatex / AZT)"
+              >
+                <div className="h-11 px-3 rounded-xl bg-white border border-slate-200 shadow-sm flex items-center justify-center shrink-0">
+                  <img 
+                    src="/assets/aistudio/image_70c0586f.png" 
+                    alt="AE MODULE" 
+                    className="h-8 w-auto max-w-[160px] object-contain" 
+                    draggable={false}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl font-bold tracking-tight text-slate-900">AE Module</h1>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">Normcalculatie & VBT</p>
+                    <span className="text-[10px] text-slate-300">•</span>
+                    <p className="text-[10px] text-orange-600 font-bold uppercase tracking-tight">By Danny Radjkoemar</p>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">PartVerify Pro</h1>
-              <div className="flex items-center gap-2">
-                <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">Schade Controle Systeem</p>
-                <span className="text-[10px] text-slate-300">•</span>
-                <p className="text-[10px] text-blue-500 font-bold uppercase tracking-tight">By Danny Radjkoemar</p>
+            ) : (
+              /* PartVerify Pro Front Page: ONLY show PartVerify Pro Logo */
+              <div 
+                className="flex items-center gap-3 cursor-pointer select-none active:scale-98 transition-transform"
+                onClick={() => {
+                  if (user?.email?.toLowerCase() === "partverify-pro@outlook.com") {
+                    setLogoClickCount(prev => {
+                      const next = prev + 1;
+                      if (next >= 5) {
+                        setIsBackdoorOpen(true);
+                        setToastMsg("Ontwikkelaarsbypass geactiveerd!");
+                        setTimeout(() => setToastMsg(null), 3000);
+                        return 0;
+                      }
+                      return next;
+                    });
+                  }
+                  setView('dashboard');
+                  setDashboardTab('verification');
+                }}
+                title="PartVerify Pro (Calculatie Verificatie)"
+              >
+                <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200 relative hover:shadow-blue-300 transition-shadow shrink-0">
+                  <CarFront className="text-white w-6 h-6" />
+                  <div className="absolute -bottom-1 -right-1 bg-white rounded-md p-0.5 shadow-sm">
+                    <ClipboardCheck className="text-blue-600 w-3 h-3" />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-xl font-bold tracking-tight">PartVerify Pro</h1>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-tighter">Schade Controle & Verificatie</p>
+                    <span className="text-[10px] text-slate-300">•</span>
+                    <p className="text-[10px] text-blue-500 font-bold uppercase tracking-tight">By Danny Radjkoemar</p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
@@ -4120,27 +4198,40 @@ export default function App() {
               <ShieldCheck size={12} />
               Sessie Actief: Danny
             </div>
-            {userProfile?.role === 'admin' && (
-              <div className="relative">
-                <select
-                  value={view === 'dashboard' ? dashboardTab : ''}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setView('dashboard');
-                      setDashboardTab(e.target.value as any);
-                      playCyberBeep(700, 0.1);
-                    }
-                  }}
-                  className="h-10 pl-3 pr-8 bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-black uppercase tracking-wider text-slate-800 transition-all appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500/10"
-                >
-                  <option value="verification">📊 Calculatie Verificatie</option>
-                  <option value="photo_analysis">📸 CarVerify Pro</option>
-                  <option value="training_center">🎓 Training Center</option>
-                  <option value="schade_observaties">🔍 Schade Observaties</option>
-                </select>
-                <ChevronDown size={14} className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500" />
-              </div>
-            )}
+            <div className="inline-flex items-center p-1 bg-slate-100/90 border border-slate-200/80 rounded-xl gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setView('dashboard');
+                  setDashboardTab('verification');
+                  playCyberBeep(700, 0.1);
+                }}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold tracking-tight transition-all cursor-pointer ${
+                  view === 'dashboard' && dashboardTab === 'verification'
+                    ? 'bg-white text-blue-600 shadow-sm border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 border border-transparent'
+                }`}
+              >
+                <ClipboardCheck size={14} className="text-blue-600 shrink-0" />
+                <span>Calculatie Verificatie</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setView('dashboard');
+                  setDashboardTab('aftrekcheck');
+                  playCyberBeep(750, 0.1);
+                }}
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold tracking-tight transition-all cursor-pointer ${
+                  view === 'dashboard' && dashboardTab === 'aftrekcheck'
+                    ? 'bg-white text-slate-900 shadow-sm border border-slate-200/80'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50 border border-transparent'
+                }`}
+              >
+                <span className="w-2 h-2 rotate-45 bg-orange-500 inline-block shrink-0" />
+                <span>AE Module</span>
+              </button>
+            </div>
             {userProfile?.role === 'admin' && (
               <button 
                 onClick={() => {
@@ -5263,41 +5354,13 @@ export default function App() {
               </div>
             </div>
           </>
-        ) : userProfile?.role === "admin" ? (
+        ) : (
           <div className="space-y-6">
             {renderDossierBar()}
             
-            {dashboardTab === 'photo_analysis' ? (
-              <PhotoAnalysisTab 
-                mode="analysis"
-                licensePlate={licensePlate}
-                vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
-                onApplySuggestedAE={(ae) => {
-                  setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
-                }}
-                db={db}
-                userId={user?.uid}
-                calcInput={calcInput}
-              />
-            ) : dashboardTab === 'training_center' ? (
-              <PhotoAnalysisTab 
-                mode="training"
-                licensePlate={licensePlate}
-                vehicleModel={vehicleData ? `${vehicleData.brand} ${vehicleData.model}` : undefined}
-                onApplySuggestedAE={(ae) => {
-                  setManualOverrides(prev => ({ ...prev, "AI Hersteladvies": ae }));
-                }}
-                db={db}
-                userId={user?.uid}
-                calcInput={calcInput}
-              />
-            ) : (
-              <SchadeObservatiesTab playCyberBeep={playCyberBeep} />
-            )}
-          </div>
-        ) : (
-          <div className="p-8 text-center text-rose-600 bg-rose-50 border border-rose-100 rounded-3xl font-bold">
-            U heeft geen toegang tot CarVerify Pro. Neem contact op met Danny.
+            <AftrekcheckModule 
+              onBackToVerification={() => setDashboardTab('verification')}
+            />
           </div>
         )}
       </>
@@ -5311,6 +5374,9 @@ export default function App() {
             onBack={() => setView('dashboard')}
             currentUserEmail={user?.email || null}
             onOpenBackdoor={() => setIsBackdoorOpen(true)}
+            customSynonyms={customSynonyms}
+            onUpdateCustomSynonyms={handleUpdateCustomSynonyms}
+            playCyberBeep={playCyberBeep}
           />
         ) : (
           <AdminView 
@@ -6358,10 +6424,12 @@ function AdminView({
   };
 
   const createUser = async () => {
-    alert("Om beveiligingsredenen moet u de gebruiker eerst aanmaken in de Firebase Console.\nZodra aangemaakt, voeg ik hier de rol toe aan Firestore.");
+    const cleanedEmail = newEmail.trim().toLowerCase();
+    if (!cleanedEmail) return;
     await addDoc(collection(db, "users"), {
-      email: newEmail,
+      email: cleanedEmail,
       role: "user",
+      tfaEnabled: false,
       createdAt: serverTimestamp()
     });
     setNewEmail("");

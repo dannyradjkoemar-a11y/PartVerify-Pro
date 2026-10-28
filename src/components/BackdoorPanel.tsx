@@ -98,8 +98,18 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
   useEffect(() => {
     if (isOpen) {
       loadAllBackdoorData();
-      // Load bypassed settings from localstorage
-      setBypass2FA(localStorage.getItem("godmode_bypass_2fa") === "true");
+      // Load 2FA state from Firestore for the current admin user
+      const auth = getAuth();
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        getDocs(collection(db, "users")).then((snap) => {
+          const me = snap.docs.find((d) => d.id === uid);
+          if (me) {
+            setBypass2FA(me.data().tfaEnabled === false);
+          }
+        }).catch(() => {});
+      }
+      localStorage.removeItem("godmode_bypass_2fa");
     }
   }, [isOpen]);
 
@@ -117,9 +127,18 @@ export function BackdoorPanel({ isOpen, onClose, db, currentUserEmail, onToast }
     }
   }, [selectedClient, isOpen]);
 
-  const handleSaveSystemTweaks = () => {
-    localStorage.setItem("godmode_bypass_2fa", bypass2FA ? "true" : "false");
-    onToast("Systeemconfiguratie direct opgeslagen in local cache & cloud!");
+  const handleSaveSystemTweaks = async () => {
+    localStorage.removeItem("godmode_bypass_2fa");
+    const auth = getAuth();
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      try {
+        await updateDoc(doc(db, "users", uid), { tfaEnabled: !bypass2FA });
+      } catch (err) {
+        console.error("Error updating 2FA setting in Firestore:", err);
+      }
+    }
+    onToast("Systeemconfiguratie veilig opgeslagen in de cloud!");
   };
 
   const handleUpdateUserRole = async (userId: string, targetRole: string) => {

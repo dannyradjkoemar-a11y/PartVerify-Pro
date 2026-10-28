@@ -230,6 +230,108 @@ Wees realistisch, help schadeherstellers om correcte calculaties op te stellen e
   }
 });
 
+// Schade Kladblok: Converteer ruwe herstelobservaties naar strakke actiepunten
+app.post("/api/schade/action-points", async (req, res) => {
+  try {
+    const { observationText, kenteken, dossier, voertuig, customSynonyms } = req.body;
+    if (!observationText || typeof observationText !== "string" || !observationText.trim()) {
+      return res.status(400).json({ error: "Geen observatietekst ontvangen." });
+    }
+
+    let customSynonymsText = "";
+    if (customSynonyms && typeof customSynonyms === "object" && Object.keys(customSynonyms).length > 0) {
+      const list = Object.entries(customSynonyms)
+        .map(([abbr, full]) => `- "${abbr}" betekent "${full}"`)
+        .join("\n");
+      customSynonymsText = `\nDoor de gebruiker ingestelde afkortingen en synoniemen:\n${list}\n`;
+    }
+
+    const prompt = `Je bent een ervaren autoschade-expert en calculatiespecialist in Nederland.
+BELANGRIJKE VASTE REGEL:
+In deze applicatie gaat het UITSLUITEND over SCHADEHERSTEL, RICHTEN, UITDEUKEN, DE- & MONTAGE EN SPUITEN (Y7/Y8).
+Het gaat NOOIT over "vernieuwen" of "vervangen" van onderdelen! 
+Alle acties moeten gericht zijn op het daadwerkelijk HERSTELLEN, RICHTEN of PLAATWERKEN van het bestaande materiaal.
+
+Specifieke Audatex/Schade Codes:
+- "atp" betekent "achtertussenpaneel" (bijv. "h atp 20" -> "herstel achtertussenpaneel 20 ae", "h atp ra 20 ae" -> "herstel achtertussenpaneel rechts achter 20 ae")
+- "bui" betekent "buiten" (bijv. "h bui paneel ra 20 ae" -> "herstel buitenpaneel rechts achter 20 ae")
+- "bi" betekent "binnen" (bijv. "h bi paneel ra 20 ae" -> "herstel binnenpaneel rechts achter 20 ae")
+- "h voorb 20" -> "herstel voorbumper 20 ae"
+- "richt a 30" -> "richten achterzijde 30 ae"
+- "y7 voorb" -> "uitgebouwd spuiten voorbumper" (Y7 betekent altijd: uitgebouwd spuiten)
+- "y8 scherm rv" -> "losse delen spuiten scherm rechts voor" (Y8 betekent altijd: losse delen spuiten)
+- "h binn paneel ra 20 ae" -> "herstel binnenpaneel rechts achter 20 ae"
+- "h dorpel r 25" -> "herstel rechter dorpel 25 ae"
+${customSynonymsText}
+Dossiergegevens ter context:
+- Kenteken: ${kenteken || "Onbekend"}
+- Dossiernummer: ${dossier || "Onbekend"}
+- Voertuig: ${voertuig || "Onbekend"}
+
+Ruwe observatietekst van de gebruiker:
+"""
+${observationText}
+"""
+
+Instructies:
+1. Converteer elke herstelregel naar een helder herstelactiepunt (bijv. "herstel voorbumper 20 ae", "richten achterzijde 30 ae", "uitgebouwd spuiten voorbumper", "losse delen spuiten scherm rechts voor").
+2. Als er arbeidseenheden (AE) zijn vermeld in de regel (bijv. 20, 30, 20 ae), neem dit exacte getal over in het veld "ae".
+3. Bepaal per punt een logische herstelcategorie ("Plaatwerk & Herstel", "Richten & Trekbank", "Spuitwerk", "Demontage & Montage", of "Controle & Meting"). Zorg dat er GEEN categorie "Onderdelen & Vervanging" voorkomt.
+4. Voeg GEEN extra toelichtende tekst, samenvattingen, tips of uitleg toe. Houd alleen de zuivere herstelactiepunten over.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: [prompt],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            actionPoints: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  task: { 
+                    type: Type.STRING, 
+                    description: "Helder, professioneel herstelactiepunt (geen vervanging)." 
+                  },
+                  category: { 
+                    type: Type.STRING, 
+                    description: "Herstelcategorie (Plaatwerk & Herstel, Richten, Spuitwerk, Demontage, Controle)." 
+                  },
+                  ae: {
+                    type: Type.NUMBER,
+                    description: "Arbeidseenheden (AE) indien afgeleid uit de tekst."
+                  },
+                  priority: { 
+                    type: Type.STRING, 
+                    description: "hoog, normaal, of laag" 
+                  }
+                },
+                required: ["task", "category", "priority"]
+              }
+            }
+          },
+          required: ["actionPoints"]
+        }
+      }
+    });
+
+    const textOutput = response.text;
+    if (!textOutput) {
+      throw new Error("Geen respons gegenereerd door Gemini.");
+    }
+
+    const parsed = JSON.parse(textOutput.trim());
+    return res.json(parsed);
+  } catch (error: any) {
+    console.error("Error creating action points from observations:", error);
+    return res.status(500).json({ error: error.message || "Actiepunten genereren mislukt." });
+  }
+});
+
 // Vite & Static file serving setup
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
